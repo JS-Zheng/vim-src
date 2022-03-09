@@ -20,19 +20,19 @@ if (has('patch-8.2.0868'))
 
   " Add an argument to only trim the beginning or end.
   " https://github.com/vim/vim/commit/2245ae18e3480057f98fc0e5d9f18091f32a5de0
-  let has_fn_dir_trim = 1
-  let has_fn_trim = 1
+  let s:has_fn_dir_trim = 1
+  let s:has_fn_trim = 1
 elseif (has('patch-8.0.1630'))
   let s:has_patch_8_0_1630 = 1
 
 
   " Add the trim() function
   " https://github.com/vim/vim/commit/295ac5ab5e840af6051bed5ec9d9acc3c73445de
-  let has_fn_dir_trim = 0
-  let has_fn_trim = 1
+  let s:has_fn_dir_trim = 0
+  let s:has_fn_trim = 1
 else
-  let has_fn_dir_trim = 0
-  let has_fn_trim = 0
+  let s:has_fn_dir_trim = 0
+  let s:has_fn_trim = 0
 endif
 
 
