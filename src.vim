@@ -98,7 +98,7 @@ function! s:source(base, path, validate) abort
 
   let l:escaped_path = fnameescape(l:full_path)
   if (get(g:, 'src_log', 0))
-    echom '[vim-src] source ' . l:escaped_path
+    echom '[vim-src] source ' .. l:escaped_path
   endif
   execute 'source' l:escaped_path
 
@@ -184,7 +184,7 @@ function! s:join_path(...) abort
     if (i == 0)
       let ret = s:strip_trailing_slash(path)
     else
-      let ret .= (sep . s:strip_slash(path))
+      let ret ..= (sep .. s:strip_slash(path))
     endif
     let i += 1
   endfor
