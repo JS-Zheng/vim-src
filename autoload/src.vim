@@ -158,7 +158,7 @@ function! s:find_dflt_base_dir() abort
 
   " Add Neovim's data directory to the list
   if s:is_nvim
-    call add(dirs, stdpath('data'))
+    call add(data_dirs, stdpath('data'))
   endif
 
   " Add directories from the runtime path
@@ -205,18 +205,18 @@ if s:is_win
       else
         " Add a separator if the result doesn't already end with one and isn't empty
         if (result != '') && (!s:path_is_end_w_sep(result))
-          let result ..= sep
+          let result .= sep
         endif
 
         " Concatenate the current component to the result
-        let result ..= comp
+        let result .= comp
       endif
     endfor
 
     " Ensure the resulting path adheres to the trailing separator rule
     let last_comp = a:components[-1]
     if (!s:path_is_end_w_sep(result)) && (last_comp == '')
-      let result ..= sep
+      let result .= sep
     endif
 
     " Return the constructed path
@@ -229,7 +229,7 @@ if s:is_win
     " Handle the %VAR_NAME% format
     let pct_env_var_pat = '\v\%(\w+)\%'
     let expanded_path = substitute(expanded_path, pct_env_var_pat,
-      \ '\=s:env_expand("$" .. submatch(1), "%" .. submatch(1) .. "%")', 'g')
+      \ '\=s:env_expand("$" . submatch(1), "%" . submatch(1) . "%")', 'g')
 
     return expanded_path
   endfunction
@@ -267,18 +267,18 @@ else
       else
         " Add a separator if the result doesn't already end with one and isn't empty
         if (result != '') && (!s:path_is_end_w_sep(result))
-          let result ..= '/'
+          let result .= '/'
         endif
 
         " Concatenate the current component to the result
-        let result ..= comp
+        let result .= comp
       endif
     endfor
 
     " Ensure the resulting path adheres to the trailing separator rule
     let last_comp = a:components[-1]
     if (!s:path_is_end_w_sep(result)) && (last_comp == '')
-      let result ..= '/'
+      let result .= '/'
     endif
 
     " Return the constructed path
@@ -326,7 +326,7 @@ function! s:unix_expand(path)
   " Handle the ${VAR_NAME} format
   let braced_env_var_pat = '\v\$\{(\w+)\}'
   let expanded_path = substitute(expanded_path, braced_env_var_pat,
-    \ '\=s:env_expand("$" .. submatch(1), "${" .. submatch(1) .. "}")', 'g')
+    \ '\=s:env_expand("$" . submatch(1), "${" . submatch(1) . "}")', 'g')
 
   return expanded_path
 endfunction
