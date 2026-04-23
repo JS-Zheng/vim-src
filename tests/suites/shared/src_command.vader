@@ -1,0 +1,443 @@
+Before:
+  let g:src_test_loaded = []
+  source plugin/src.vim
+
+After:
+  unlet! g:src_test_loaded
+
+
+Execute (Src accepts a single-quoted path):
+  let g:src_test_loaded = []
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  Src 'one.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['one'], g:src_test_loaded
+
+
+Execute (call src#() accepts a direct string path):
+  let g:src_test_loaded = []
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  call src#('one.vim')
+  call src#end()
+
+Then:
+  AssertEqual ['one'], g:src_test_loaded
+
+
+Execute (call src#() accepts a one-item list target):
+  let g:src_test_loaded = []
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  call src#(['one.vim'])
+  call src#end()
+
+Then:
+  AssertEqual ['one'], g:src_test_loaded
+
+
+Execute (Src rejects multiple command items on one line):
+  let error = ''
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  try
+    Src 'one.vim', 'two.vim'
+  catch
+    let error = v:exception
+  endtry
+  call src#end()
+
+Then:
+  Assert error =~# '^src:'
+
+
+Execute (Src without arguments sources the current buffer):
+  let g:src_test_loaded = []
+  enew
+  call setline(1, ["let g:src_test_loaded = ['buffer-cmd']"])
+  Src
+  bwipe!
+
+Then:
+  AssertEqual ['buffer-cmd'], g:src_test_loaded
+
+
+Execute (call src#cmd() without arguments delegates to current-buffer execution):
+  let g:src_test_loaded = []
+  enew
+  call setline(1, ["let g:src_test_loaded = ['buffer-cmd-func']"])
+  call src#cmd(0)
+  bwipe!
+
+Then:
+  AssertEqual ['buffer-cmd-func'], g:src_test_loaded
+
+
+Execute (call src#() sources an unnamed current buffer):
+  let g:src_test_loaded = []
+  enew
+  call setline(1, ["let g:src_test_loaded = ['buffer-func']"])
+  call src#()
+  bwipe!
+
+Then:
+  AssertEqual ['buffer-func'], g:src_test_loaded
+
+
+Execute (Src! without arguments sources the current buffer):
+  let g:src_test_loaded = []
+  enew
+  call setline(1, ["let g:src_test_loaded = ['buffer-cmd-bang']"])
+  Src!
+  bwipe!
+
+Then:
+  AssertEqual ['buffer-cmd-bang'], g:src_test_loaded
+
+
+Execute (call src#cmd() respects validate mode for zero-arg current-buffer execution):
+  let g:src_test_loaded = []
+  enew
+  call setline(1, ["let g:src_test_loaded = ['buffer-cmd-func-bang']"])
+  call src#cmd(1)
+  bwipe!
+
+Then:
+  AssertEqual ['buffer-cmd-func-bang'], g:src_test_loaded
+
+
+Execute (call src#() sources a named unmodified buffer from disk):
+  let g:src_test_loaded = []
+  execute 'edit' fnameescape(getcwd() . '/tests/fixtures/src-command/one.vim')
+  call src#()
+  bwipe!
+
+Then:
+  AssertEqual ['one'], g:src_test_loaded
+
+
+Execute (Src without arguments uses modified named buffer contents):
+  " Validates that Src captures the unsaved memory state of a buffer rather
+  " than just re-reading the file from disk, ensuring a smooth live-reload
+  " development experience.
+
+  let g:src_test_loaded = []
+  execute 'edit' fnameescape(getcwd() . '/tests/fixtures/stack-cleanup/current-buffer-broken.vim')
+  call setline(1, ["let g:src_test_loaded = ['buffer-cmd-modified']"])
+  2,$delete _
+  Src
+  bwipe!
+
+Then:
+  AssertEqual ['buffer-cmd-modified'], g:src_test_loaded
+
+
+Execute (call src#() uses modified named buffer contents):
+  let g:src_test_loaded = []
+  execute 'edit' fnameescape(getcwd() . '/tests/fixtures/stack-cleanup/current-buffer-broken.vim')
+  call setline(1, ["let g:src_test_loaded = ['buffer-func-modified']"])
+  2,$delete _
+  call src#()
+  bwipe!
+
+Then:
+  AssertEqual ['buffer-func-modified'], g:src_test_loaded
+
+
+Execute (Src! without arguments uses modified named buffer contents):
+  let g:src_test_loaded = []
+  execute 'edit' fnameescape(getcwd() . '/tests/fixtures/stack-cleanup/current-buffer-broken.vim')
+  call setline(1, ["let g:src_test_loaded = ['buffer-cmd-bang-modified']"])
+  2,$delete _
+  Src!
+  bwipe!
+
+Then:
+  AssertEqual ['buffer-cmd-bang-modified'], g:src_test_loaded
+
+
+Execute (call src#([]) is a no-op, not current-buffer mode):
+  let g:src_test_loaded = []
+  enew
+  call setline(1, ["let g:src_test_loaded = ['buffer-func']"])
+  call src#([])
+  bwipe!
+
+Then:
+  AssertEqual [], g:src_test_loaded
+
+
+Execute (Src rejects a single bare word path):
+  let error = ''
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  try
+    Src one.vim
+  catch
+    let error = v:exception
+  endtry
+  call src#end()
+
+Then:
+  Assert error !=# ''
+
+
+Execute (Src accepts single-quoted paths with spaces):
+  let g:src_test_loaded = []
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  Src 'dir with spaces/space file.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['space file'], g:src_test_loaded
+
+
+Execute (call src#cmd() accepts a quoted path and delegates like :Src):
+  let g:src_test_loaded = []
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  call src#cmd(0, 'one.vim')
+  call src#end()
+
+Then:
+  AssertEqual ['one'], g:src_test_loaded
+
+
+Execute (call src#cmd() accepts a concatenated Vim path expression):
+  let g:src_test_loaded = []
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  call src#cmd(0, 'one' . '.vim')
+  call src#end()
+
+Then:
+  AssertEqual ['one'], g:src_test_loaded
+
+
+Execute (call src#cmd() accepts an explicit expand() Vim path expression):
+  let g:src_test_loaded = []
+  let root = tempname()
+  call mkdir(root, 'p')
+  call writefile([
+        \ "let g:src_test_loaded = ['expanded']",
+        \ ], root . '/expanded.vim')
+  let save_home = $HOME
+  let $HOME = root
+  try
+    call src#cmd(0, expand('~') . '/expanded.vim')
+  finally
+    let $HOME = save_home
+    call delete(root, 'rf')
+  endtry
+
+Then:
+  AssertEqual ['expanded'], g:src_test_loaded
+
+
+Execute (call src#cmd() in bang mode accepts a quoted path and delegates like :Src!):
+  let g:src_test_loaded = []
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  call src#cmd(1, 'one.vim')
+  call src#end()
+
+Then:
+  AssertEqual ['one'], g:src_test_loaded
+
+
+Execute (Src accepts double-quoted paths with spaces):
+  let g:src_test_loaded = []
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  Src "dir with spaces/space file.vim"
+  call src#end()
+
+Then:
+  AssertEqual ['space file'], g:src_test_loaded
+
+
+Execute (Src accepts a single-quoted path containing an escaped single quote):
+  let g:src_test_loaded = []
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  execute "Src 'quote''s.vim'"
+  call src#end()
+
+Then:
+  AssertEqual ['single-quote'], g:src_test_loaded
+
+
+Execute (Src rejects unterminated quoted paths):
+  let error = ''
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  try
+    execute "Src 'one.vim"
+  catch
+    let error = v:exception
+  endtry
+  call src#end()
+
+Then:
+  Assert error !=# ''
+
+
+Execute (Src accepts an explicit second-argument dict shape):
+  let g:src_test_loaded = []
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  execute "Src 'one.vim', {'optional': 1}"
+  call src#end()
+
+Then:
+  AssertEqual ['one'], g:src_test_loaded
+
+
+Execute (call src#cmd() accepts an explicit second-argument dict shape):
+  let g:src_test_loaded = []
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  call src#cmd(0, 'one.vim', {'optional': 1})
+  call src#end()
+
+Then:
+  AssertEqual ['one'], g:src_test_loaded
+
+
+Execute (Src skips a missing target when the if option is falsy):
+  let g:src_test_loaded = []
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  execute "Src 'missing.vim', {'if': 0}"
+  call src#end()
+
+Then:
+  AssertEqual [], g:src_test_loaded
+
+
+Execute (A falsy if option does not become ambient state for later sibling Src calls):
+  let g:src_test_loaded = []
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  execute "Src 'missing.vim', {'if': 0}"
+  Src 'one.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['one'], g:src_test_loaded
+
+
+Execute (Src loads a target when the if option is truthy):
+  let g:src_test_loaded = []
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  execute "Src 'one.vim', {'if': 1}"
+  call src#end()
+
+Then:
+  AssertEqual ['one'], g:src_test_loaded
+
+
+Execute (Src rejects malformed expression input):
+  " Validates robust error handling for syntactically invalid Vim expressions
+  " provided as command arguments.
+  let error = ''
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  try
+    execute "Src 'one.vim' ."
+  catch
+    let error = v:exception
+  endtry
+  call src#end()
+
+Then:
+  Assert error !=# ''
+
+
+Execute (call src#cmd() rejects an invalid option dict):
+  let error = ''
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  try
+    call src#cmd(0, 'one.vim', {'bogus': 1})
+  catch
+    let error = v:exception
+  endtry
+  call src#end()
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_ARG .. ':'
+
+
+Execute (call src#cmd() rejects a non-Dict second argument):
+  let error = ''
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  try
+    call src#cmd(0, 'one.vim', ['optional'])
+  catch
+    let error = v:exception
+  endtry
+  call src#end()
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_ARG .. ':'
+
+
+Execute (call src#() preserves list order across multiple targets):
+  let g:src_test_loaded = []
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  call src#(['one.vim', 'two.vim'])
+  call src#end()
+
+Then:
+  AssertEqual ['one', 'two'], g:src_test_loaded
+
+
+Execute (Src accepts a single-quoted filename with leading and trailing spaces):
+  let g:src_test_loaded = []
+  let root = tempname()
+  call mkdir(root, 'p')
+  call writefile([
+        \ "let g:src_test_loaded = ['spacey']",
+        \ ], root . '/ weird tail .vim ')
+  call src#begin(root)
+  execute "Src ' weird tail .vim '"
+  call src#end()
+  call delete(root, 'rf')
+
+Then:
+  AssertEqual ['spacey'], g:src_test_loaded
+
+
+Execute (Src accepts punctuation-heavy filenames as quoted literals):
+  let g:src_test_loaded = []
+  let root = tempname()
+  call mkdir(root, 'p')
+  call writefile([
+        \ "let g:src_test_loaded = ['punct']",
+        \ ], root . '/[x],;{}!&^.vim')
+  call src#begin(root)
+  execute "Src '[x],;{}!&^.vim'"
+  call src#end()
+  call delete(root, 'rf')
+
+Then:
+  AssertEqual ['punct'], g:src_test_loaded
+
+
+Execute (Src accepts a double-quoted Unicode filename):
+  let g:src_test_loaded = []
+  let root = tempname()
+  call mkdir(root, 'p')
+  call writefile([
+        \ "let g:src_test_loaded = ['unicode']",
+        \ ], root . '/中文 檔名.vim')
+  call src#begin(root)
+  execute 'Src "中文 檔名.vim"'
+  call src#end()
+  call delete(root, 'rf')
+
+Then:
+  AssertEqual ['unicode'], g:src_test_loaded
+
+
+Execute (call src#() accepts weird but legal filenames literally):
+  let g:src_test_loaded = []
+  let root = tempname()
+  call mkdir(root, 'p')
+  call writefile([
+        \ "let g:src_test_loaded = ['mixed']",
+        \ ], root . '/mix [中] ;,!.vim')
+  call src#begin(root)
+  call src#('mix [中] ;,!.vim')
+  call src#end()
+  call delete(root, 'rf')
+
+Then:
+  AssertEqual ['mixed'], g:src_test_loaded

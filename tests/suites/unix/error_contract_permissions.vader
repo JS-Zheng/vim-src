@@ -1,0 +1,84 @@
+Before:
+  source autoload/src.vim
+  source tests/lib/test_helper.vim
+
+After:
+  unlet! g:caught
+
+
+Execute (Src throws a stable not-found error for a broken symlink target):
+  let root = getcwd() .. '/tests/.tmp/error-contract-broken-symlink'
+  call delete(root, 'rf')
+  call mkdir(root, 'p')
+  call system('ln -s missing-target ' .. root .. '/broken')
+  let error = ''
+  call src#begin(root)
+  try
+    Src 'broken'
+  catch
+    let error = v:exception
+  finally
+    call src#end()
+    call delete(root, 'rf')
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'
+
+
+Execute (call src#('broken') throws a stable not-found error for a broken symlink target):
+  let root = getcwd() .. '/tests/.tmp/error-contract-broken-symlink-call'
+  call delete(root, 'rf')
+  call mkdir(root, 'p')
+  call system('ln -s missing-target ' .. root .. '/broken')
+  let error = ''
+  call src#begin(root)
+  try
+    call src#('broken')
+  catch
+    let error = v:exception
+  finally
+    call src#end()
+    call delete(root, 'rf')
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'
+
+
+Execute (Src throws a stable unreadable file error):
+  let root = getcwd() .. '/tests/.tmp/error-contract-unreadable-file'
+  call delete(root, 'rf')
+  call writefile(['" test'], root)
+  call SrcTestMakeUnreadable(root, 'file')
+  let error = ''
+  try
+    call src#(root)
+  catch
+    let error = v:exception
+  finally
+    call SrcTestRestoreReadable(root, 'file')
+    call delete(root)
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'
+
+
+Execute (Src throws a stable unreadable directory error):
+  let root = getcwd() .. '/tests/.tmp/error-contract-unreadable-dir'
+  call delete(root, 'rf')
+  call mkdir(root, 'p')
+  call SrcTestMakeUnreadable(root, 'dir')
+  let error = ''
+  try
+    call src#(root)
+  catch
+    let error = v:exception
+  finally
+    call SrcTestRestoreReadable(root, 'dir')
+    call delete(root, 'd')
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'

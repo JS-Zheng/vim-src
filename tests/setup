@@ -1,0 +1,23 @@
+#!/bin/sh
+
+set -eu
+
+ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+DEPS_DIR="$ROOT_DIR/.deps"
+VADER_DIR="$DEPS_DIR/vader.vim"
+VADER_REPO="https://github.com/junegunn/vader.vim"
+
+mkdir -p "$DEPS_DIR"
+
+if [ -d "$VADER_DIR/.git" ]; then
+  printf '%s\n' "vader.vim already installed at $VADER_DIR"
+  exit 0
+fi
+
+if [ -e "$VADER_DIR" ]; then
+  printf '%s\n' "error: $VADER_DIR exists but is not a git checkout" >&2
+  exit 1
+fi
+
+printf '%s\n' "cloning vader.vim into $VADER_DIR"
+git clone "$VADER_REPO" "$VADER_DIR"

@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        editor:
+          - vim
+          - nvim
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Vim
+        if: matrix.editor == 'vim'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y vim
+
+      - name: Install Neovim
+        if: matrix.editor == 'nvim'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y neovim
+
+      - name: Bootstrap test dependencies
+        run: tests/setup
+
+      - name: Run test suite
+        run: make test VIM_BIN=${{ matrix.editor }}

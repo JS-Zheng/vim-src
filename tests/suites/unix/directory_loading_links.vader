@@ -1,0 +1,58 @@
+Before:
+  let g:src_directory_loading_hits = []
+  let g:src = {'follow_links': 1}
+  source plugin/src.vim
+
+After:
+  unlet! g:src_directory_loading_hits
+  unlet! g:src
+
+
+Execute (Directory loading includes symlinked child files when follow_links is enabled):
+  let g:src_directory_loading_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/directory-loading')
+  Src 'main'
+  call src#end()
+
+Then:
+  Assert index(g:src_directory_loading_hits, '99-linked') >= 0
+
+
+Execute (Directory loading can opt out of symlinked child files with follow_links = 0):
+  let g:src_directory_loading_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/directory-loading')
+  execute "Src 'main', {'follow_links': 0}"
+  call src#end()
+
+Then:
+  Assert index(g:src_directory_loading_hits, '99-linked') == -1
+
+
+Execute (Directory loading skips symlinked child directories when follow_links is enabled):
+  let g:src_directory_loading_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/directory-loading')
+  Src 'main'
+  call src#end()
+
+Then:
+  Assert index(g:src_directory_loading_hits, 'linked-dir') == -1
+
+
+Execute (call src#() accepts a directory target when follow_links is enabled):
+  let g:src_directory_loading_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/directory-loading')
+  call src#('main')
+  call src#end()
+
+Then:
+  AssertEqual ['10-first', '99-linked', '20-second', 'A-upper', 'a-lower'], g:src_directory_loading_hits
+
+
+Execute (Directory loading order is lexical by basename and case-sensitive when follow_links is enabled):
+  let g:src_directory_loading_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/directory-loading')
+  Src 'main'
+  call src#end()
+
+Then:
+  AssertEqual ['10-first', '99-linked', '20-second', 'A-upper', 'a-lower'], g:src_directory_loading_hits

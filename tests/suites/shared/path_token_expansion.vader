@@ -1,0 +1,69 @@
+Before:
+  let g:path_token_hits = []
+  source plugin/src.vim
+
+After:
+  unlet! g:path_token_hits
+  call src#end()
+  call src#end()
+
+
+Execute (Quoted % is treated as a literal filename, not a special expansion token):
+  let g:path_token_hits = []
+  let root = getcwd() . '/tests/fixtures/path-token-expansion'
+  execute 'edit' fnameescape(root . '/current-buffer-source.vim')
+  call src#begin(root)
+  Src '%'
+  call src#end()
+
+Then:
+  AssertEqual ['literal-percent'], g:path_token_hits
+
+
+Execute (Quoted # is treated as a literal filename, not the alternate buffer token):
+  let g:path_token_hits = []
+  let root = getcwd() . '/tests/fixtures/path-token-expansion'
+  execute 'edit' fnameescape(root . '/alternate-buffer-source.vim')
+  execute 'edit' fnameescape(root . '/current-buffer-source.vim')
+  call src#begin(root)
+  Src '#'
+  call src#end()
+
+Then:
+  AssertEqual ['literal-hash'], g:path_token_hits
+
+
+Execute (src#begin('%:p:h') does not treat expand modifiers as a special path syntax):
+  let error = ''
+  let root = getcwd() . '/tests/fixtures/path-token-expansion'
+  execute 'edit' fnameescape(root . '/modscope/current.vim')
+  try
+    call src#begin('%:p:h')
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_RESOLUTION .. ':'
+
+
+Execute (Quoted $HOME path does not trigger environment expansion):
+  " Tests the boundary between home-prefix expansion (~) and generic
+  " environment variable expansion ($VAR).
+  " Only ~ is supported; raw dollar-prefixed paths must be treated literally to
+  " avoid unpredictable environment-dependent loads.
+
+  let g:path_token_hits = []
+  let error = ''
+  let root = getcwd() . '/tests/fixtures/path-token-expansion'
+  call src#begin(root)
+  try
+    Src '$HOME'
+  catch
+    let error = v:exception
+  endtry
+  call src#end()
+
+Then:
+  AssertEqual [], g:path_token_hits
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'

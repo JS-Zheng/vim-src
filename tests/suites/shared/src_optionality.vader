@@ -1,0 +1,188 @@
+Before:
+  let g:src_optionality_hits = []
+  source plugin/src.vim
+
+After:
+  unlet! g:src_optionality_hits
+
+
+Execute (Src! skips a missing file):
+  let g:src_optionality_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/src-optionality')
+  Src! 'missing.vim'
+  call src#end()
+
+Then:
+  AssertEqual [], g:src_optionality_hits
+
+
+Execute (call src#(..., 1) skips a missing file):
+  let g:src_optionality_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/src-optionality')
+  call src#('missing.vim', 1)
+  call src#end()
+
+Then:
+  AssertEqual [], g:src_optionality_hits
+
+
+Execute (call src#([..], 1) skips a missing list entry):
+  let g:src_optionality_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/src-optionality')
+  call src#(['missing.vim', 'after_failure.vim'], 1)
+  call src#end()
+
+Then:
+  AssertEqual 1, len(g:src_optionality_hits)
+  AssertEqual ['after-failure'], g:src_optionality_hits
+
+
+Execute (call src#([..], 1) preserves list order for readable entries):
+  let g:src_optionality_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/src-optionality')
+  call src#(['after_failure.vim', 'after_failure.vim'], 1)
+  call src#end()
+
+Then:
+  AssertEqual ['after-failure', 'after-failure'], g:src_optionality_hits
+
+
+Execute (Src! skips a missing directory):
+  let g:src_optionality_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/src-optionality')
+  Src! 'missing-dir'
+  call src#end()
+
+Then:
+  AssertEqual [], g:src_optionality_hits
+
+
+Execute (call src#(..., 1) skips a missing directory):
+  let g:src_optionality_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/src-optionality')
+  call src#('missing-dir', 1)
+  call src#end()
+
+Then:
+  AssertEqual [], g:src_optionality_hits
+
+
+Execute (Src! treats an empty directory as a successful no-op):
+  let g:src_optionality_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/directory-loading')
+  Src! 'empty'
+  call src#end()
+
+Then:
+  AssertEqual [], g:src_optionality_hits
+
+
+Execute (call src#(..., 1) treats an empty directory as a successful no-op):
+  let g:src_optionality_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/directory-loading')
+  call src#('empty', 1)
+  call src#end()
+
+Then:
+  AssertEqual [], g:src_optionality_hits
+
+
+Execute (Src! does not suppress runtime errors from a readable file):
+  let error = ''
+  let g:src_optionality_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/src-optionality')
+  try
+    Src! 'runtime_error.vim'
+  catch
+    let error = v:exception
+  endtry
+  call src#end()
+
+Then:
+  AssertEqual ['runtime-before-error'], g:src_optionality_hits
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'
+
+
+Execute (call src#(..., 1) does not suppress runtime errors from a readable file):
+  let error = ''
+  let g:src_optionality_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/src-optionality')
+  try
+    call src#('runtime_error.vim', 1)
+  catch
+    let error = v:exception
+  endtry
+  call src#end()
+
+Then:
+  AssertEqual ['runtime-before-error'], g:src_optionality_hits
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'
+
+
+Execute (Src! directory loading still fails when a readable child throws):
+  let error = ''
+  let g:src_optionality_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/src-optionality')
+  try
+    Src! 'runtime-dir'
+  catch
+    let error = v:exception
+  endtry
+  call src#end()
+
+Then:
+  AssertEqual ['10-ok'], g:src_optionality_hits
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'
+
+
+Execute (call src#(..., 1) directory loading still fails when a readable child throws):
+  let error = ''
+  let g:src_optionality_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/src-optionality')
+  try
+    call src#('runtime-dir', 1)
+  catch
+    let error = v:exception
+  endtry
+  call src#end()
+
+Then:
+  AssertEqual ['10-ok'], g:src_optionality_hits
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'
+
+
+Execute (call src#([..], 1) still fails when a readable list entry throws):
+  let error = ''
+  let g:src_optionality_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/src-optionality')
+  try
+    call src#(['after_failure.vim', 'runtime_error.vim'], 1)
+  catch
+    let error = v:exception
+  endtry
+  call src#end()
+
+Then:
+  AssertEqual ['after-failure', 'runtime-before-error'], g:src_optionality_hits
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'
+
+
+Execute (Src! directory failure does not poison later loads):
+  " Ensures that a failure during directory expansion does not leave the
+  " resolution stack or global state in a corrupted state, allowing subsequent
+  " loads to proceed normally.
+
+  let error = ''
+  let g:src_optionality_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/src-optionality')
+  try
+    Src! 'runtime-dir'
+  catch
+    let error = v:exception
+  endtry
+  Src 'after_failure.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['10-ok', 'after-failure'], g:src_optionality_hits
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'

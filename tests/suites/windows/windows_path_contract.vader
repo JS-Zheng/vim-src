@@ -1,0 +1,55 @@
+Before:
+  source plugin/src.vim
+  source autoload/src.vim
+  source tests/lib/test_helper.vim
+  let g:src_default_base_hits = []
+  let g:src_test_target = ''
+  let g:src_test_rooted = ''
+
+After:
+  call src#end()
+  call src#end()
+  unlet! g:src
+  unlet! g:src_default_base_hits
+  unlet! g:src_test_target
+  unlet! g:src_test_rooted
+
+
+Execute (src#begin() accepts a current-drive rooted slash path on Windows):
+  let g:src_test_target = fnamemodify(getcwd() .. '/tests/fixtures/base-dir/existing', ':p')
+  let g:src_test_rooted = SrcTestWindowsRootedPath(g:src_test_target)
+  let g:src_default_base_hits = []
+
+  call src#begin(getcwd() .. '/tests/fixtures/src-command')
+  call src#begin(g:src_test_rooted)
+  call src#('default.vim')
+  call src#end()
+  call src#end()
+
+Then:
+  call SrcTestAssertEqual(['base-dir-override'], g:src_default_base_hits, {
+        \ 'case': 'windows rooted src#begin',
+        \ 'target': g:src_test_target,
+        \ 'rooted': g:src_test_rooted,
+        \ 'cwd': getcwd(),
+        \ })
+
+
+Execute (g:src.base_dir accepts a current-drive rooted slash path on Windows):
+  let g:src_test_target = fnamemodify(getcwd() .. '/tests/fixtures/base-dir/existing', ':p')
+  let g:src_test_rooted = SrcTestWindowsRootedPath(g:src_test_target)
+  let g:src = {'base_dir': g:src_test_rooted}
+  let g:src_default_base_hits = []
+
+  call src#begin()
+  call src#('default.vim')
+  call src#end()
+
+Then:
+  call SrcTestAssertEqual(['base-dir-override'], g:src_default_base_hits, {
+        \ 'case': 'windows rooted g:src.base_dir',
+        \ 'target': g:src_test_target,
+        \ 'rooted': g:src_test_rooted,
+        \ 'base_dir': get(g:, 'src', {})->get('base_dir', ''),
+        \ 'cwd': getcwd(),
+        \ })

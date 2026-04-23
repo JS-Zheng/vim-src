@@ -1,0 +1,176 @@
+Before:
+  source autoload/src.vim
+
+After:
+  unlet! g:caught
+
+
+Execute (Src throws a stable not-found error for a missing file):
+  let error = ''
+  call src#begin(getcwd() .. '/tests/fixtures/src-command')
+  try
+    Src 'missing.vim'
+  catch
+    let error = v:exception
+  endtry
+  call src#end()
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'
+
+
+Execute (call src#('missing.vim') throws a stable not-found error for a missing file):
+  " Confirms that the functional entry point src#() mirrors the command
+  " behavior when handling missing file targets.
+
+  let error = ''
+  call src#begin(getcwd() .. '/tests/fixtures/src-command')
+  try
+    call src#('missing.vim')
+  catch
+    let error = v:exception
+  endtry
+  call src#end()
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'
+
+
+Execute (Src throws a stable not-found error for a missing directory):
+  let error = ''
+  call src#begin(getcwd() .. '/tests/fixtures/src-optionality')
+  try
+    Src 'missing-dir'
+  catch
+    let error = v:exception
+  endtry
+  call src#end()
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'
+
+
+Execute (call src#('missing-dir') throws a stable not-found error for a missing directory):
+  " Validates consistent error reporting for missing directories when using the
+  " src#() API.
+
+  let error = ''
+  call src#begin(getcwd() .. '/tests/fixtures/src-optionality')
+  try
+    call src#('missing-dir')
+  catch
+    let error = v:exception
+  endtry
+  call src#end()
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'
+
+
+
+
+Execute (Readable sourced script failures are wrapped as stable src errors):
+  " Confirms the 'wrapper' behavior where internal runtime errors within a 
+  " successfully sourced script are caught and re-thrown as stable ERR_SOURCE
+  " errors to provide a consistent failure interface.
+  let error = ''
+  let path = getcwd() .. '/tests/fixtures/error-contract/broken.vim'
+  try
+    call src#(path)
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'
+
+
+Execute (Readable sourced script failures emit source context and original error):
+  let error = ''
+  let path = getcwd() .. '/tests/fixtures/error-contract/broken.vim'
+  try
+    call src#(path)
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'
+
+
+Execute (Current-buffer failure from a named file buffer is wrapped as stable src error):
+  " Validates that sourcing the current active buffer handles failures by
+  " wrapping them in the standard vim-src error format.
+
+  let error = ''
+  edit tests/fixtures/error-contract/broken.vim
+  try
+    Src
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'
+
+
+Execute (Current-buffer failure from a named modified buffer emits diagnostics with file context):
+  let error = ''
+  edit tests/fixtures/error-contract/broken.vim
+  set modified
+  try
+    Src
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'
+
+
+Execute (Current-buffer failure from an unnamed buffer is wrapped as stable src error):
+  let error = ''
+  enew
+  insert
+  invalid-vim-command
+  .
+  try
+    Src
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'
+
+
+Execute (Current-buffer temp-file write failures are wrapped as stable src errors):
+  enew
+  insert
+  invalid-command-here
+  .
+  let error = ''
+  try
+    Src
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'
+
+
+Execute (Src! current-buffer failures still surface stable src errors):
+  enew
+  insert
+  invalid-command-here
+  .
+  let error = ''
+  try
+    Src!
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'

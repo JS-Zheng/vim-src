@@ -1,0 +1,16 @@
+Before:
+  let g:src_test_loaded = []
+  source plugin/src.vim
+
+After:
+  unlet! g:src_test_loaded
+
+
+Execute (Src accepts a double-quoted path containing an escaped double quote):
+  let g:src_test_loaded = []
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  execute 'Src "dquote\"file.vim"'
+  call src#end()
+
+Then:
+  AssertEqual ['double-quote'], g:src_test_loaded

@@ -1,0 +1,110 @@
+Before:
+  source plugin/src.vim
+  source autoload/src.vim
+  source tests/lib/test_helper.vim
+  let g:src_test_target = ''
+  let g:src_test_path = ''
+  let g:src_test_messages = ''
+  let g:src_test_error = ''
+  let g:src_test_save_shellslash = &shellslash
+
+After:
+  let &shellslash = g:src_test_save_shellslash
+  call src#end()
+  call src#end()
+  unlet! g:src
+  unlet! g:src_test_target
+  unlet! g:src_test_path
+  unlet! g:src_test_messages
+  unlet! g:src_test_error
+  unlet! g:src_test_save_shellslash
+
+
+Execute (Debug begin output uses slash-normalized paths with shellslash enabled):
+  set shellslash
+  let g:src_test_target = fnamemodify(getcwd() .. '/tests/fixtures/base-dir/existing', ':p')
+  let g:src_test_path = SrcTestWindowsSlashPath(g:src_test_target)
+  let g:src = {'debug': 1}
+
+  redir => g:src_test_messages
+  silent call src#begin(g:src_test_path)
+  silent call src#end()
+  redir END
+
+Then:
+  call SrcTestAssertMatch('begin: ' .. escape(g:src_test_path, '\'), g:src_test_messages, {
+        \ 'case': 'shellslash debug begin path',
+        \ 'target': g:src_test_target,
+        \ 'path': g:src_test_path,
+        \ 'messages': g:src_test_messages,
+        \ })
+
+
+Execute (Debug begin output uses backslash-normalized paths with shellslash disabled):
+  set noshellslash
+  let g:src_test_target = fnamemodify(getcwd() .. '/tests/fixtures/base-dir/existing', ':p')
+  let g:src_test_path = SrcTestWindowsBackslashPath(g:src_test_target)
+  let g:src = {'debug': 1}
+
+  redir => g:src_test_messages
+  silent call src#begin(g:src_test_path)
+  silent call src#end()
+  redir END
+
+Then:
+  call SrcTestAssertMatch('begin: ' .. escape(g:src_test_path, '\'), g:src_test_messages, {
+        \ 'case': 'noshellslash debug begin path',
+        \ 'target': g:src_test_target,
+        \ 'path': g:src_test_path,
+        \ 'messages': g:src_test_messages,
+        \ })
+
+
+Execute (Missing absolute slash-path targets preserve slash shape in errors):
+  set shellslash
+  let g:src_test_target = fnamemodify(getcwd() .. '/tests/fixtures/base-dir/existing', ':p')
+  let g:src_test_path = SrcTestWindowsSlashPath(g:src_test_target) .. '/missing.vim'
+  let g:src_test_error = ''
+
+  try
+    call src#(g:src_test_path)
+  catch
+    let g:src_test_error = v:exception
+  endtry
+
+Then:
+  call SrcTestAssertEqual(
+        \ 'src: ' .. g:src#ERR_INVALID_TARGET .. ': source target ' .. g:src_test_path .. ' not found',
+        \ g:src_test_error,
+        \ {
+        \ 'case': 'slash path missing target error',
+        \ 'target': g:src_test_target,
+        \ 'path': g:src_test_path,
+        \ 'exception': g:src_test_error,
+        \ }
+        \ )
+
+
+Execute (Missing absolute backslash-path targets preserve backslash shape in errors):
+  set noshellslash
+  let g:src_test_target = fnamemodify(getcwd() .. '/tests/fixtures/base-dir/existing', ':p')
+  let g:src_test_path = SrcTestWindowsBackslashPath(g:src_test_target) .. '\missing.vim'
+  let g:src_test_error = ''
+
+  try
+    call src#(g:src_test_path)
+  catch
+    let g:src_test_error = v:exception
+  endtry
+
+Then:
+  call SrcTestAssertEqual(
+        \ 'src: ' .. g:src#ERR_INVALID_TARGET .. ': source target ' .. g:src_test_path .. ' not found',
+        \ g:src_test_error,
+        \ {
+        \ 'case': 'backslash path missing target error',
+        \ 'target': g:src_test_target,
+        \ 'path': g:src_test_path,
+        \ 'exception': g:src_test_error,
+        \ }
+        \ )

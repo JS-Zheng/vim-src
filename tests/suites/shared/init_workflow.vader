@@ -1,0 +1,72 @@
+Before:
+  let g:src_test_save_home = exists('$HOME') ? $HOME : ''
+  let g:src_test_save_xdg = exists('$XDG_CONFIG_HOME') ? $XDG_CONFIG_HOME : ''
+  let g:src_test_save_myvimrc = exists('$MYVIMRC') ? $MYVIMRC : ''
+  let g:init_workflow_hits = []
+  if exists(':Src') == 2
+    delcommand Src
+  endif
+  unlet! g:src
+  source autoload/src.vim
+
+After:
+  let $HOME = g:src_test_save_home
+  let $XDG_CONFIG_HOME = g:src_test_save_xdg
+  let $MYVIMRC = g:src_test_save_myvimrc
+  unlet! g:init_workflow_hits
+  unlet! g:src_test_save_home
+  unlet! g:src_test_save_xdg
+  unlet! g:src_test_save_myvimrc
+  unlet! g:src
+
+
+Execute (src#init enables the official default-base file workflow):
+  let $HOME = getcwd() . '/tests/fixtures/init-workflow/home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = $HOME . '/.vimrc'
+  let g:init_workflow_hits = []
+  call src#init()
+  Src 'general.vim'
+
+Then:
+  AssertEqual ['general'], g:init_workflow_hits
+
+
+Execute (src#init enables directory loading from the default base directory):
+  " Verifies that the initialized environment correctly handles directory
+  " targets, resolving them against the auto-detected config root.
+
+  let $HOME = getcwd() .. '/tests/fixtures/init-workflow/home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = $HOME . '/.vimrc'
+  let g:init_workflow_hits = []
+  call src#init()
+  Src 'plugin-configs'
+
+Then:
+  AssertEqual ['10-core', '20-ui'], g:init_workflow_hits
+
+
+Execute (src#init enables optional local overrides without requiring begin/end):
+  let $HOME = getcwd() . '/tests/fixtures/init-workflow/home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = $HOME . '/.vimrc'
+  let g:init_workflow_hits = []
+  call src#init()
+  Src 'general.vim'
+  Src! 'local'
+
+Then:
+  AssertEqual ['general'], g:init_workflow_hits
+
+
+Execute (src#init workflow supports src#begin() relative to the current loading context):
+  let $HOME = getcwd() . '/tests/fixtures/init-workflow/home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = $HOME . '/.vimrc'
+  let g:init_workflow_hits = []
+  call src#init()
+  Src 'plugins.vim'
+
+Then:
+  AssertEqual ['asyncrun', 'coc'], g:init_workflow_hits

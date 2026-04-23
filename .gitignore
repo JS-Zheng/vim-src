@@ -1,0 +1,6 @@
+.deps/
+
+# Vim / Neovim swap and backup files
+*.swp
+*.swo
+*~

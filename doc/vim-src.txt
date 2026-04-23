@@ -1,0 +1,261 @@
+*vim-src.txt*    Minimalist Vim and Neovim config loader
+
+==============================================================================
+CONTENTS                                                *vim-src-contents*
+
+    1. Introduction.............................|vim-src-introduction|
+    2. Philosophy...............................|vim-src-philosophy|
+    3. Quick Start..............................|vim-src-quickstart|
+    4. Commands.................................|vim-src-commands|
+    5. Functions................................|vim-src-functions|
+    6. Configuration............................|vim-src-config|
+    7. Base Directory Resolution................|vim-src-base-dir|
+    8. Directory Loading........................|vim-src-dir|
+    9. Optional Files...........................|vim-src-optional|
+   10. Scope....................................|vim-src-scope|
+   11. Errors...................................|vim-src-errors|
+   12. Examples.................................|vim-src-examples|
+
+==============================================================================
+
+1. Introduction                                  *vim-src-introduction*
+
+vim-src is a minimalist config loader for Vim and Neovim.
+
+Supported editors:
+- Vim 8.2 and newer
+- Neovim
+
+It loads configuration files relative to a base directory.
+
+vim-src does NOT:
+- manage plugins
+- modify 'runtimepath'
+- manage packages
+
+==============================================================================
+
+2. Philosophy                                    *vim-src-philosophy*
+
+vim-src follows a simple design:
+
+- minimal surface area
+- deterministic behavior
+- explicit over implicit
+- no runtimepath magic
+
+It is intended for early startup and bootstrap usage.
+
+==============================================================================
+
+3. Quick Start                                   *vim-src-quickstart*
+
+Initialize:
+
+    call src#init()
+
+Load files:
+
+    Src 'general.vim'
+    Src 'mappings.vim'
+    Src 'plugins'
+
+==============================================================================
+
+4. Commands                                      *vim-src-commands*
+
+                                                *:Src*
+:Src
+        Source the current buffer.
+
+:Src {path}
+        Load a file or directory relative to the current base directory.
+
+                                                *:Src!*
+:Src! {path}
+        Same as |:Src| but ignore missing or unreadable targets.
+
+==============================================================================
+
+5. Functions                                     *vim-src-functions*
+
+                                                *src#init()*
+src#init()
+        Initialize vim-src.
+
+                                                *src#()*
+src#({path})
+        Function version of |:Src|. With no arguments, source the current
+        buffer.
+
+                                                *src#begin()*
+src#begin([{path}])
+        Push a new base directory scope.
+
+                                                *src#end()*
+src#end()
+        Pop one scope.
+
+==============================================================================
+
+6. Configuration                                 *vim-src-config*
+
+All options are under:
+
+    let g:src = {}
+
+                                                *g:src.base_dir*
+g:src.base_dir
+        Explicit base directory.
+
+        Must resolve to an absolute directory.
+        "~" and "~/..." are accepted.
+
+                                                *g:src.base_name*
+g:src.base_name
+        Name of the config directory.
+
+        Default: "vimrcs"
+
+        When empty, vim-src resolves a base directory directly.
+
+                                                *g:src.follow_links*
+g:src.follow_links
+        Follow symlinks when loading directories.
+
+                                                *g:src.debug*
+g:src.debug
+        Enable debug messages.
+
+==============================================================================
+
+7. Base Directory Resolution                     *vim-src-base-dir*
+
+Resolution order:
+
+1. Explicit override: |g:src.base_dir|
+
+2. Named directory: |g:src.base_name| != ''
+
+   Search:
+
+        dirname($MYVIMRC)
+        stdpath('config')          (Neovim)
+        ~/vimfiles                 (Windows)
+        ~/.vim
+        $XDG_CONFIG_HOME/vim
+        $VIM/vimfiles
+        $VIMRUNTIME
+
+3. Canonical config root: |g:src.base_name| == ''
+
+   Search:
+
+        stdpath('config')
+        ~/vimfiles
+        ~/.vim
+        $XDG_CONFIG_HOME/vim
+        dirname($MYVIMRC)
+        $VIM/vimfiles
+        $VIMRUNTIME
+
+==============================================================================
+
+8. Directory Loading                             *vim-src-dir*
+
+When a directory is given:
+
+    Src 'plugins'
+
+vim-src loads all direct child *.vim files.
+
+Example order:
+
+    plugins/
+        10-core.vim
+        20-git.vim
+        30-fzf.vim
+
+    Src 'plugins'
+
+Loads:
+
+    1. 10-core.vim
+    2. 20-git.vim
+    3. 30-fzf.vim
+
+Rules:
+
+- non-recursive
+- lexical order
+- only *.vim
+- hidden files ignored
+- symlinks optional
+
+==============================================================================
+
+9. Optional Files                                *vim-src-optional*
+
+    Src! 'file.vim'
+
+Missing files are ignored.
+
+Errors inside files are still reported.
+
+==============================================================================
+
+10. Scope                                        *vim-src-scope*
+
+Example:
+
+    call src#begin('plugins')
+    Src 'git.vim'
+    Src 'fzf.vim'
+    call src#end()
+
+    call src#begin('theme')
+    Src 'colorscheme.vim'
+    Src 'statusline.vim'
+    call src#end()
+
+==============================================================================
+
+11. Errors                                       *vim-src-errors*
+
+Errors follow this format:
+
+    src: {category}: {message}
+
+Categories:
+
+    invalid argument
+    invalid state
+    invalid target
+    resolution failure
+    source failure
+
+==============================================================================
+
+12. Examples                                     *vim-src-examples*
+
+Typical layout:
+
+    ~/.vim/
+        vimrcs/
+            general.vim
+            mappings.vim
+            plugins/
+                10-core.vim
+                20-git.vim
+
+Usage:
+
+    call src#init()
+
+    Src 'general.vim'
+    Src 'mappings.vim'
+    Src 'plugins'
+
+==============================================================================
+
+vim:tw=78:ts=8:ft=help:norl:

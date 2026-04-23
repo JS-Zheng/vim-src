@@ -1,0 +1,102 @@
+Before:
+  source plugin/src.vim
+  source autoload/src.vim
+  source tests/lib/test_helper.vim
+  let g:src_default_base_hits = []
+  let g:src_test_target = ''
+  let g:src_test_path = ''
+  let g:src_test_save_shellslash = &shellslash
+
+After:
+  let &shellslash = g:src_test_save_shellslash
+  call src#end()
+  call src#end()
+  unlet! g:src
+  unlet! g:src_default_base_hits
+  unlet! g:src_test_target
+  unlet! g:src_test_path
+  unlet! g:src_test_save_shellslash
+
+
+Execute (src#begin() accepts slash paths with shellslash enabled):
+  set shellslash
+  let g:src_test_target = fnamemodify(getcwd() .. '/tests/fixtures/base-dir/existing', ':p')
+  let g:src_test_path = SrcTestWindowsSlashPath(g:src_test_target)
+  let g:src_default_base_hits = []
+
+  call src#begin(getcwd() .. '/tests/fixtures/src-command')
+  call src#begin(g:src_test_path)
+  call src#('default.vim')
+  call src#end()
+  call src#end()
+
+Then:
+  call SrcTestAssertEqual(['base-dir-override'], g:src_default_base_hits, {
+        \ 'case': 'shellslash src#begin slash path',
+        \ 'target': g:src_test_target,
+        \ 'path': g:src_test_path,
+        \ 'cwd': getcwd(),
+        \ })
+
+
+Execute (src#begin() accepts backslash paths with shellslash disabled):
+  set noshellslash
+  let g:src_test_target = fnamemodify(getcwd() .. '/tests/fixtures/base-dir/existing', ':p')
+  let g:src_test_path = SrcTestWindowsBackslashPath(g:src_test_target)
+  let g:src_default_base_hits = []
+
+  call src#begin(getcwd() .. '/tests/fixtures/src-command')
+  call src#begin(g:src_test_path)
+  call src#('default.vim')
+  call src#end()
+  call src#end()
+
+Then:
+  call SrcTestAssertEqual(['base-dir-override'], g:src_default_base_hits, {
+        \ 'case': 'noshellslash src#begin backslash path',
+        \ 'target': g:src_test_target,
+        \ 'path': g:src_test_path,
+        \ 'cwd': getcwd(),
+        \ })
+
+
+Execute (g:src.base_dir accepts slash paths with shellslash enabled):
+  set shellslash
+  let g:src_test_target = fnamemodify(getcwd() .. '/tests/fixtures/base-dir/existing', ':p')
+  let g:src_test_path = SrcTestWindowsSlashPath(g:src_test_target)
+  let g:src = {'base_dir': g:src_test_path}
+  let g:src_default_base_hits = []
+
+  call src#begin()
+  call src#('default.vim')
+  call src#end()
+
+Then:
+  call SrcTestAssertEqual(['base-dir-override'], g:src_default_base_hits, {
+        \ 'case': 'shellslash g:src.base_dir slash path',
+        \ 'target': g:src_test_target,
+        \ 'path': g:src_test_path,
+        \ 'base_dir': get(g:, 'src', {})->get('base_dir', ''),
+        \ 'cwd': getcwd(),
+        \ })
+
+
+Execute (g:src.base_dir accepts backslash paths with shellslash disabled):
+  set noshellslash
+  let g:src_test_target = fnamemodify(getcwd() .. '/tests/fixtures/base-dir/existing', ':p')
+  let g:src_test_path = SrcTestWindowsBackslashPath(g:src_test_target)
+  let g:src = {'base_dir': g:src_test_path}
+  let g:src_default_base_hits = []
+
+  call src#begin()
+  call src#('default.vim')
+  call src#end()
+
+Then:
+  call SrcTestAssertEqual(['base-dir-override'], g:src_default_base_hits, {
+        \ 'case': 'noshellslash g:src.base_dir backslash path',
+        \ 'target': g:src_test_target,
+        \ 'path': g:src_test_path,
+        \ 'base_dir': get(g:, 'src', {})->get('base_dir', ''),
+        \ 'cwd': getcwd(),
+        \ })

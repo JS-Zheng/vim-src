@@ -1,0 +1,230 @@
+Before:
+  let g:src_test_save_home = exists('$HOME') ? $HOME : ''
+  let g:src_test_save_xdg = exists('$XDG_CONFIG_HOME') ? $XDG_CONFIG_HOME : ''
+  let g:src_test_save_myvimrc = exists('$MYVIMRC') ? $MYVIMRC : ''
+  let g:src_test_save_vim = exists('$VIM') ? $VIM : ''
+  let g:src_test_save_vimruntime = exists('$VIMRUNTIME') ? $VIMRUNTIME : ''
+  let g:src_test_save_rtp = &runtimepath
+  let g:src_default_base_hits = []
+  source plugin/src.vim
+  source autoload/src.vim
+
+After:
+  let $HOME = g:src_test_save_home
+  let $XDG_CONFIG_HOME = g:src_test_save_xdg
+  let $MYVIMRC = g:src_test_save_myvimrc
+  let $VIM = g:src_test_save_vim
+  let $VIMRUNTIME = g:src_test_save_vimruntime
+  let &runtimepath = g:src_test_save_rtp
+  unlet! g:src_default_base_hits
+  unlet! g:src_test_save_home
+  unlet! g:src_test_save_xdg
+  unlet! g:src_test_save_myvimrc
+  unlet! g:src_test_save_vim
+  unlet! g:src_test_save_vimruntime
+  unlet! g:src_test_save_rtp
+
+
+Execute (Default base dir follows ~/.vim for ~/.vimrc):
+  " Verifies the classic Vim pattern where finding a ~/.vimrc results
+  " in a default base directory of ~/.vim/vimrcs.
+  let $HOME = getcwd() .. '/tests/fixtures/default-base/home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = $HOME . '/.vimrc'
+  let g:src_default_base_hits = []
+  call src#begin()
+  Src 'default.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['home'], g:src_default_base_hits
+
+
+Execute (Default base dir follows XDG vim config):
+  let $HOME = getcwd() . '/tests/fixtures/default-base/home'
+  let $XDG_CONFIG_HOME = getcwd() . '/tests/fixtures/default-base/xdg'
+  let $MYVIMRC = $XDG_CONFIG_HOME . '/vim/vimrc'
+  let $VIM = ''
+  let $VIMRUNTIME = ''
+  let g:src_default_base_hits = []
+  call src#begin()
+  Src 'default.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['xdg'], g:src_default_base_hits
+
+
+Execute (Default base dir falls back to ~/.config/vim when XDG_CONFIG_HOME is unset):
+  let $HOME = getcwd() . '/tests/fixtures/default-base/home-xdg-only'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = ''
+  let $VIM = ''
+  let $VIMRUNTIME = ''
+  let g:src_default_base_hits = []
+  call src#begin()
+  Src 'default.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['home-xdg-only'], g:src_default_base_hits
+
+
+Execute (Default base dir respects g:src.base_dir override):
+  " Validates that an explicit g:src.base_dir configuration takes absolute
+  " precedence over any environment-based discovery logic.
+
+  let $HOME = getcwd() .. '/tests/fixtures/default-base/home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = ''
+  let $VIM = ''
+  let $VIMRUNTIME = ''
+  let g:src = {'base_dir': getcwd() . '/tests/fixtures/base-dir/existing'}
+  let g:src_default_base_hits = []
+  call src#begin()
+  Src 'default.vim'
+  call src#end()
+  let g:src = {}
+
+Then:
+  AssertEqual ['base-dir-override'], g:src_default_base_hits
+
+
+Execute (Default base dir respects g:src.base_name):
+  let $HOME = getcwd() . '/tests/fixtures/default-base/home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = $HOME . '/.vimrc'
+  let $VIM = ''
+  let $VIMRUNTIME = ''
+  let g:src = {'base_name': 'customrcs'}
+  let g:src_default_base_hits = []
+  call src#begin()
+  Src 'default.vim'
+  call src#end()
+  let g:src = {}
+
+Then:
+  AssertEqual ['custom-base-dir-name'], g:src_default_base_hits
+
+
+Execute (Default base dir cache invalidates when g:src.base_name changes):
+  let $HOME = getcwd() . '/tests/fixtures/default-base/home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = $HOME . '/.vimrc'
+  let $VIM = ''
+  let $VIMRUNTIME = ''
+  let g:src_default_base_hits = []
+
+  let g:src = {}
+  call src#begin()
+  Src 'default.vim'
+  call src#end()
+
+  let g:src = {'base_name': 'customrcs'}
+  call src#begin()
+  Src 'default.vim'
+  call src#end()
+
+  let g:src = {}
+
+Then:
+  AssertEqual ['home', 'custom-base-dir-name'], g:src_default_base_hits
+
+
+Execute (Default base dir cache invalidates when g:src.base_dir changes):
+  let $HOME = getcwd() . '/tests/fixtures/default-base/home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = $HOME . '/.vimrc'
+  let $VIM = ''
+  let $VIMRUNTIME = ''
+  let g:src_default_base_hits = []
+
+  let g:src = {}
+  call src#begin()
+  Src 'default.vim'
+  call src#end()
+
+  let g:src = {'base_dir': getcwd() . '/tests/fixtures/base-dir/existing'}
+  call src#begin()
+  Src 'default.vim'
+  call src#end()
+
+  let g:src = {}
+
+Then:
+  AssertEqual ['home', 'base-dir-override'], g:src_default_base_hits
+
+
+Execute (Default base dir falls back to $VIM/vimfiles in named mode):
+  let $HOME = getcwd() . '/tests/fixtures/default-base/empty-home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = ''
+  let $VIM = getcwd() . '/tests/fixtures/default-base/vim'
+  let $VIMRUNTIME = ''
+  let g:src_default_base_hits = []
+  call src#begin()
+  Src 'default.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['vim'], g:src_default_base_hits
+
+
+Execute (Default base dir falls back to $VIMRUNTIME in named mode):
+  let $HOME = getcwd() . '/tests/fixtures/default-base/empty-home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = ''
+  let $VIM = ''
+  let $VIMRUNTIME = getcwd() . '/tests/fixtures/default-base/vimruntime'
+  let g:src_default_base_hits = []
+  call src#begin()
+  Src 'default.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['vimruntime'], g:src_default_base_hits
+
+
+Execute (Canonical default base dir falls back to $VIM/vimfiles in Vim):
+  " Neovim canonical mode always considers stdpath('config') first, and that
+  " root is not reliably redirectable mid-session. This fallback contract is
+  " therefore only testable in Vim.
+  if has('nvim')
+    let g:src_default_base_hits = ['nvim-skip']
+  else
+    let $HOME = getcwd() . '/tests/fixtures/default-base/empty-home'
+    let $XDG_CONFIG_HOME = ''
+    let $MYVIMRC = ''
+    let $VIM = getcwd() . '/tests/fixtures/default-base/vim'
+    let $VIMRUNTIME = ''
+    let g:src = {'base_name': ''}
+    let g:src_default_base_hits = []
+    call src#begin()
+    Src 'default.vim'
+    call src#end()
+    let g:src = {}
+  endif
+
+Then:
+  if has('nvim')
+    AssertEqual ['nvim-skip'], g:src_default_base_hits
+  else
+    AssertEqual ['vim-canonical'], g:src_default_base_hits
+  endif
+
+
+Execute (Default base dir expands ~/... in explicit override mode):
+  let $HOME = getcwd() . '/tests/fixtures/default-base/home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = ''
+  let $VIM = ''
+  let $VIMRUNTIME = ''
+  let g:src = {'base_dir': '~/.vim/vimrcs'}
+  let g:src_default_base_hits = []
+  call src#begin()
+  Src 'default.vim'
+  call src#end()
+  let g:src = {}
+
+Then:
+  AssertEqual ['home'], g:src_default_base_hits

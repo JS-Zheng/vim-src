@@ -1,0 +1,72 @@
+Before:
+  let g:src_follow_links_hits = []
+  source plugin/src.vim
+
+After:
+  unlet! g:src_follow_links_hits
+  unlet! g:src
+
+
+Execute (An explicit symlinked file target follows links when enabled globally and can opt out):
+  let root = getcwd() . '/tests/.tmp/follow-links-file-target'
+  let real = root . '/real'
+  let link = root . '/alias-file.vim'
+  let g:src_follow_links_hits = []
+  let error = ''
+
+  call delete(root, 'rf')
+  call mkdir(real, 'p')
+  call writefile(["let g:src_follow_links_hits = ['linked-file']"], real . '/target.vim')
+  call system('ln -s ' . shellescape('real/target.vim') . ' ' . shellescape(link))
+
+  try
+    let g:src = {'follow_links': 1}
+    call src#begin(root)
+    Src 'alias-file.vim'
+    try
+      execute "Src 'alias-file.vim', {'follow_links': 0}"
+    catch
+      let error = v:exception
+    endtry
+    call src#end()
+  finally
+    call delete(root, 'rf')
+  endtry
+
+Then:
+  AssertEqual ['linked-file'], g:src_follow_links_hits
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'
+
+
+Execute (An explicit symlinked directory target follows links when enabled globally and can opt out):
+  " Validates that directory-level link resolution also respects per-call
+  " configuration, ensuring consistent behavior across file and folder targets.
+
+  let root = getcwd() . '/tests/.tmp/follow-links-dir-target'
+  let real = root . '/real-dir'
+  let link = root . '/alias-dir'
+  let g:src_follow_links_hits = []
+  let error = ''
+
+  call delete(root, 'rf')
+  call mkdir(real, 'p')
+  call writefile(["let g:src_follow_links_hits += ['linked-dir-child']"], real . '/10-child.vim')
+  call system('ln -s ' . shellescape('real-dir') . ' ' . shellescape(link))
+
+  try
+    let g:src = {'follow_links': 1}
+    call src#begin(root)
+    Src 'alias-dir'
+    try
+      execute "Src 'alias-dir', {'follow_links': 0}"
+    catch
+      let error = v:exception
+    endtry
+    call src#end()
+  finally
+    call delete(root, 'rf')
+  endtry
+
+Then:
+  AssertEqual ['linked-dir-child'], g:src_follow_links_hits
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'

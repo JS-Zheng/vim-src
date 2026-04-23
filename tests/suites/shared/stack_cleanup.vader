@@ -1,0 +1,66 @@
+Before:
+  let g:src_stack_cleanup_hits = []
+  source autoload/src.vim
+
+After:
+  unlet! g:src_stack_cleanup_hits
+  call src#end()
+  call src#end()
+
+
+Execute (Nested begin should not leak after sourcing failure):
+  " Critical safety test: verifies that the resolution stack is correctly
+  " unwound and restored to its previous state even if a sourced script
+  " crashes.
+
+  call src#begin(getcwd() . '/tests/fixtures/stack-cleanup/outer')
+  try
+    call src#('broken_section.vim')
+  catch
+  endtry
+  call src#('good.vim')
+  call src#end()
+
+Then:
+  AssertEqual ['outer'], g:src_stack_cleanup_hits
+
+
+Execute (Current-buffer source should not leak after sourcing failure):
+  call src#begin(getcwd() . '/tests/fixtures/stack-cleanup/outer')
+  execute 'edit' fnameescape(getcwd() . '/tests/fixtures/stack-cleanup/current-buffer-broken.vim')
+  try
+    call src#()
+  catch
+  endtry
+  edit!
+  call src#('good.vim')
+  call src#end()
+
+Then:
+  AssertEqual ['outer'], g:src_stack_cleanup_hits
+
+
+Execute (Current-buffer source should use modified buffer contents):
+  let g:src_stack_cleanup_hits = []
+  execute 'edit' fnameescape(getcwd() . '/tests/fixtures/stack-cleanup/current-buffer-broken.vim')
+  call setline(1, ["let g:src_stack_cleanup_hits = ['buffer']"])
+  2,$delete _
+  call src#()
+  edit!
+
+Then:
+  AssertEqual ['buffer'], g:src_stack_cleanup_hits
+
+
+Execute (Directory-child failure should not leak context or scope state):
+  let g:src_stack_cleanup_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/stack-cleanup')
+  try
+    call src#('dir')
+  catch
+  endtry
+  call src#('base/good.vim')
+  call src#end()
+
+Then:
+  AssertEqual ['dir-ok', 'base'], g:src_stack_cleanup_hits

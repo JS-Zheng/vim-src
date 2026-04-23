@@ -1,0 +1,99 @@
+Before:
+  source autoload/src.vim
+
+
+Execute (Missing base dir should fail clearly):
+  let error = ''
+  try
+    call src#begin(getcwd() . '/tests/fixtures/base-dir/missing-child')
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_RESOLUTION .. ':'
+
+
+Execute (Relative g:src.base_dir should fail clearly):
+  let error = ''
+  let g:src = {'base_dir': 'tests/fixtures/base-dir/existing'}
+  try
+    call src#begin()
+  catch
+    let error = v:exception
+  endtry
+  let g:src = {}
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_RESOLUTION .. ':'
+
+
+Execute (File path used as base dir should fail clearly):
+  " Confirms that base directory resolution explicitly checks for directory
+  " status via isdirectory(), preventing regular files from being used as scope
+  " roots.
+
+  let error = ''
+  try
+    call src#begin(getcwd() . '/tests/fixtures/base-dir/existing/file.vim')
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_RESOLUTION .. ':'
+
+
+Execute (Tilde base_dir resolves against HOME when it points to a directory):
+  let save_home = exists('$HOME') ? $HOME : ''
+  let $HOME = getcwd() . '/tests/fixtures/base-dir/existing'
+  let g:src = {'base_dir': '~'}
+  let g:src_default_base_hits = []
+  let error = ''
+
+  try
+    call src#begin()
+    call src#('default.vim')
+    call src#end()
+  catch
+    let error = v:exception
+  finally
+    let $HOME = save_home
+    let g:src = {}
+  endtry
+
+Then:
+  AssertEqual '', error
+  AssertEqual ['base-dir-override'], g:src_default_base_hits
+
+
+Execute (Named mode miss reports the configured base_name):
+  let save_home = exists('$HOME') ? $HOME : ''
+  let save_xdg = exists('$XDG_CONFIG_HOME') ? $XDG_CONFIG_HOME : ''
+  let save_myvimrc = exists('$MYVIMRC') ? $MYVIMRC : ''
+  let save_vim = exists('$VIM') ? $VIM : ''
+  let save_vimruntime = exists('$VIMRUNTIME') ? $VIMRUNTIME : ''
+  let $HOME = getcwd() . '/tests/fixtures/default-base/empty-home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = ''
+  let $VIM = ''
+  let $VIMRUNTIME = ''
+  let g:src = {'base_name': 'missingrcs'}
+  let error = ''
+
+  try
+    call src#begin()
+  catch
+    let error = v:exception
+  finally
+    let $HOME = save_home
+    let $XDG_CONFIG_HOME = save_xdg
+    let $MYVIMRC = save_myvimrc
+    let $VIM = save_vim
+    let $VIMRUNTIME = save_vimruntime
+    let g:src = {}
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_RESOLUTION .. ': base directory not found for base_name: missingrcs$'
+

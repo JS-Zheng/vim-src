@@ -1,0 +1,154 @@
+Before:
+  if exists(':Src') == 2
+    delcommand Src
+  endif
+  unlet! g:src
+  unlet! g:loaded_src
+
+After:
+  if exists(':Src') == 2
+    delcommand Src
+  endif
+  unlet! g:src
+
+
+Execute (plugin startup defines the Src command by default):
+  source plugin/src.vim
+
+Then:
+  Assert exists(':Src') == 2
+  Assert type(g:src) == v:t_dict
+
+
+Execute (src#init() defines the Src command by default):
+  call src#init()
+
+Then:
+  Assert exists(':Src') == 2
+  Assert type(g:src) == v:t_dict
+
+
+Execute (src#init() normalizes a non-Dict g:src namespace directly):
+  let g:src = 1
+  call src#init()
+
+Then:
+  Assert type(g:src) == v:t_dict
+  Assert exists(':Src') == 2
+
+
+Execute (src#init() is idempotent):
+  " Ensures that multiple calls to the bootstrap sequence do not result in
+  " redundant state changes or command re-definitions.
+
+  call src#init()
+  call src#init()
+
+Then:
+  Assert exists(':Src') == 2
+  Assert type(g:src) == v:t_dict
+
+
+Execute (src#init() repairs command availability after Src was deleted):
+  call src#init()
+  delcommand Src
+  call src#init()
+
+Then:
+  Assert exists(':Src') == 2
+
+
+Execute (src#init() respects g:src.def_commands = 0):
+  let g:src = {'def_commands': 0}
+  call src#init()
+
+Then:
+  Assert exists(':Src') == 0
+  AssertEqual 0, get(g:src, 'def_commands', 1)
+
+
+Execute (src#def_cmds() defines the Src command explicitly):
+  let g:src = {'def_commands': 0}
+  call src#def_cmds()
+
+Then:
+  Assert exists(':Src') == 2
+  AssertEqual 0, get(g:src, 'def_commands', 1)
+
+
+Execute (plugin startup respects g:src.def_commands = 0):
+  let g:src = {'def_commands': 0}
+  source plugin/src.vim
+
+Then:
+  Assert exists(':Src') == 0
+  AssertEqual 0, get(g:src, 'def_commands', 1)
+
+
+Execute (plugin startup normalizes a non-Dict g:src into a Dict namespace):
+  let g:src = 1
+  source plugin/src.vim
+
+Then:
+  Assert type(g:src) == v:t_dict
+  Assert exists(':Src') == 2
+
+
+Execute (src#begin() bootstraps command availability for advanced usage):
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  call src#end()
+
+Then:
+  Assert exists(':Src') == 2
+
+
+Execute (src#begin() respects g:src.def_commands = 0):
+  let g:src = {'def_commands': 0}
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  call src#end()
+
+Then:
+  Assert exists(':Src') == 0
+  AssertEqual 0, get(g:src, 'def_commands', 1)
+
+
+Execute (repeated nested src#begin() does not disturb command availability):
+  call src#init()
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  call src#end()
+  call src#end()
+
+Then:
+  Assert exists(':Src') == 2
+
+
+Execute (src#begin() repairs command availability when Src was deleted after bootstrap):
+  call src#init()
+  delcommand Src
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  call src#end()
+
+Then:
+  Assert exists(':Src') == 2
+
+
+Execute (repeated nested src#begin() still works when g:src.def_commands = 0):
+  let g:src = {'def_commands': 0}
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  call src#begin(getcwd() . '/tests/fixtures/src-command')
+  call src#end()
+  call src#end()
+
+Then:
+  Assert exists(':Src') == 0
+  AssertEqual 0, get(g:src, 'def_commands', 1)
+
+
+Execute (src#end() is a no-op when no scope is active):
+  source plugin/src.vim
+  call src#end()
+  call src#end()
+
+Then:
+  Assert 1

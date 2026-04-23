@@ -1,0 +1,109 @@
+Before:
+  let g:src_test_save_home = exists('$HOME') ? $HOME : ''
+  let g:src_test_save_xdg = exists('$XDG_CONFIG_HOME') ? $XDG_CONFIG_HOME : ''
+  let g:src_test_save_myvimrc = exists('$MYVIMRC') ? $MYVIMRC : ''
+  let g:deep_scope_workflow_hits = []
+  if exists(':Src') == 2
+    delcommand Src
+  endif
+  unlet! g:src
+  source autoload/src.vim
+
+After:
+  let $HOME = g:src_test_save_home
+  let $XDG_CONFIG_HOME = g:src_test_save_xdg
+  let $MYVIMRC = g:src_test_save_myvimrc
+  unlet! g:deep_scope_workflow_hits
+  unlet! g:src_test_save_home
+  unlet! g:src_test_save_xdg
+  unlet! g:src_test_save_myvimrc
+  call src#end()
+  call src#end()
+  call src#end()
+  call src#end()
+  unlet! g:src
+
+
+Execute (Official init workflow supports deep mixed relative and absolute scope transitions):
+  let $HOME = getcwd() . '/tests/fixtures/deep-scope-workflow/home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = $HOME . '/.vimrc'
+  let g:deep_scope_workflow_hits = []
+  call src#init()
+  Src 'general.vim'
+  Src 'plugins.vim'
+  Src 'themes.vim'
+
+Then:
+  AssertEqual [
+        \ 'general',
+        \ 'plugins-enter',
+        \ 'fzf-enter',
+        \ 'coc-fzf',
+        \ 'fzf-grep-enter',
+        \ 'rg-enter',
+        \ 'rg-config',
+        \ 'rg-plugin',
+        \ 'benchmark',
+        \ 'after-rg',
+        \ 'ag',
+        \ 'after-grep',
+        \ 'after-fzf',
+        \ 'coc',
+        \ 'plugins-after',
+        \ 'themes',
+        \ ], g:deep_scope_workflow_hits
+
+
+Execute (Nested plugin workflow does not poison sibling plugin resolution):
+  let $HOME = getcwd() . '/tests/fixtures/deep-scope-workflow/home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = $HOME . '/.vimrc'
+  let g:deep_scope_workflow_hits = []
+  call src#init()
+  Src 'plugins.vim'
+
+Then:
+  AssertEqual [
+        \ 'plugins-enter',
+        \ 'fzf-enter',
+        \ 'coc-fzf',
+        \ 'fzf-grep-enter',
+        \ 'rg-enter',
+        \ 'rg-config',
+        \ 'rg-plugin',
+        \ 'benchmark',
+        \ 'after-rg',
+        \ 'ag',
+        \ 'after-grep',
+        \ 'after-fzf',
+        \ 'coc',
+        \ 'plugins-after',
+        \ ], g:deep_scope_workflow_hits
+
+
+Execute (Absolute begin can be used directly and still unwinds back to the parent external scope):
+  " Tests the 'absolute jump' pattern where src#begin() is called with an
+  " absolute path, and confirms that src#end() correctly pops back to the
+  " previous environment-detected default base directory.
+
+  let $HOME = getcwd() .. '/tests/fixtures/deep-scope-workflow/home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = $HOME . '/.vimrc'
+  let g:deep_scope_workflow_hits = []
+  call src#init()
+  call src#begin('~/.local/opt/fzf/vim')
+  Src 'fzf-grep.vim'
+  call src#end()
+
+Then:
+  AssertEqual [
+        \ 'fzf-grep-enter',
+        \ 'rg-enter',
+        \ 'rg-config',
+        \ 'rg-plugin',
+        \ 'benchmark',
+        \ 'after-rg',
+        \ 'ag',
+        \ 'after-grep',
+        \ ], g:deep_scope_workflow_hits

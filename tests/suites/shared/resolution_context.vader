@@ -1,0 +1,92 @@
+Before:
+  let g:src_resolution_context_hits = []
+  source plugin/src.vim
+
+After:
+  unlet! g:src_resolution_context_hits
+  call src#end()
+  call src#end()
+
+
+Execute (Current loading context takes precedence inside a vim-src loading chain):
+  " Tests the chain of responsibility during loading: as files are sourced
+  " recursively, each file's location correctly updates the relative base for
+  " its own internal Src calls.
+
+  let g:src_resolution_context_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/resolution-context')
+  Src 'root/10-nested-loader.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['10-loader', '20-child'], g:src_resolution_context_hits
+
+
+Execute (A later src#begin() inside a sourced script resolves relative to the current resolution base):
+  let g:src_resolution_context_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/resolution-context')
+  Src 'root/11-scope-does-not-override-context.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['11-loader', '20-alt-child'], g:src_resolution_context_hits
+
+
+Execute (Directory-expanded children resolve relative paths from their own directory):
+  let g:src_resolution_context_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/resolution-context')
+  Src 'root'
+  call src#end()
+
+Then:
+  AssertEqual ['10-loader', '20-child', '11-loader', '20-alt-child', '20-context-child'], g:src_resolution_context_hits
+
+
+Execute (Relative src#begin path resolves against the current resolution base):
+  let g:src_resolution_context_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/resolution-context')
+  call src#begin('root/nested')
+  Src '20-child.vim'
+  call src#end()
+  call src#end()
+
+Then:
+  AssertEqual ['20-child'], g:src_resolution_context_hits
+
+
+Execute (src#end pops only the innermost active scope):
+  let g:src_resolution_context_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/resolution-context')
+  call src#begin('root/nested')
+  call src#end()
+  call src#begin('root')
+  Src '20-context-child.vim'
+  call src#end()
+  call src#end()
+
+Then:
+  AssertEqual ['20-context-child'], g:src_resolution_context_hits
+
+
+Execute (After the final src#end, relative src#begin uses the configured default base):
+  let g:src = {'base_dir': getcwd() . '/tests/fixtures/resolution-context'}
+  let g:src_resolution_context_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/resolution-context')
+  call src#end()
+  call src#begin('root/nested')
+  Src '20-child.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['20-child'], g:src_resolution_context_hits
+
+
+Execute (Relative src#begin path without scope can use the configured default base directly):
+  let g:src = {'base_dir': getcwd() . '/tests/fixtures/resolution-context'}
+  let g:src_resolution_context_hits = []
+  call src#begin('root')
+  Src '20-context-child.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['20-context-child'], g:src_resolution_context_hits

@@ -1,0 +1,116 @@
+Before:
+  let g:src_optionality_hits = []
+  source plugin/src.vim
+
+After:
+  unlet! g:src_optionality_hits
+
+
+Execute (Src! skips a broken symlink target):
+  let root = getcwd() . '/tests/.tmp/src-optionality-broken-symlink'
+  let g:src_optionality_hits = []
+  call delete(root, 'rf')
+  call mkdir(root, 'p')
+  call system('ln -s ' . shellescape('missing-target') . ' ' . shellescape(root . '/broken'))
+  try
+    call src#begin(root)
+    Src! 'broken'
+    call src#end()
+  finally
+    call delete(root, 'rf')
+  endtry
+
+Then:
+  AssertEqual [], g:src_optionality_hits
+
+
+Execute (call src#(..., 1) skips a broken symlink target):
+  let root = getcwd() . '/tests/.tmp/src-optionality-broken-symlink-func'
+  let g:src_optionality_hits = []
+  call delete(root, 'rf')
+  call mkdir(root, 'p')
+  call system('ln -s ' . shellescape('missing-target') . ' ' . shellescape(root . '/broken'))
+  try
+    call src#begin(root)
+    call src#('broken', 1)
+    call src#end()
+  finally
+    call delete(root, 'rf')
+  endtry
+
+Then:
+  AssertEqual [], g:src_optionality_hits
+
+
+Execute (Src! skips an unreadable file):
+  let root = getcwd() . '/tests/.tmp/src-optionality-unreadable-file'
+  call mkdir(fnamemodify(root, ':h'), 'p')
+  call writefile(['let g:src_optionality_hits = ["unreadable-file"]'], root)
+  call setfperm(root, '---------')
+  let g:src_optionality_hits = []
+  try
+    call src#begin(fnamemodify(root, ':h'))
+    Src! 'src-optionality-unreadable-file'
+    call src#end()
+  finally
+    call setfperm(root, 'rw-------')
+    call delete(root)
+  endtry
+
+Then:
+  AssertEqual [], g:src_optionality_hits
+
+
+Execute (call src#(..., 1) skips an unreadable file):
+  let root = getcwd() . '/tests/.tmp/src-optionality-unreadable-file-func'
+  call mkdir(fnamemodify(root, ':h'), 'p')
+  call writefile(['let g:src_optionality_hits = ["unreadable-file-func"]'], root)
+  call setfperm(root, '---------')
+  let g:src_optionality_hits = []
+  try
+    call src#begin(fnamemodify(root, ':h'))
+    call src#('src-optionality-unreadable-file-func', 1)
+    call src#end()
+  finally
+    call setfperm(root, 'rw-------')
+    call delete(root)
+  endtry
+
+Then:
+  AssertEqual [], g:src_optionality_hits
+
+
+Execute (Src! skips an unreadable directory):
+  let root = getcwd() . '/tests/.tmp/src-optionality-unreadable-dir'
+  call mkdir(root, 'p')
+  call setfperm(root, '---------')
+  let g:src_optionality_hits = []
+  try
+    call src#begin(getcwd() . '/tests/.tmp')
+    Src! 'src-optionality-unreadable-dir'
+    call src#end()
+  finally
+    call setfperm(root, 'rwx------')
+    call delete(root, 'd')
+  endtry
+
+Then:
+  AssertEqual [], g:src_optionality_hits
+
+
+Execute (call src#(..., 1) skips an unreadable directory):
+  let root = getcwd() . '/tests/.tmp/src-optionality-unreadable-dir-func'
+  call mkdir(root, 'p')
+  call setfperm(root, '---------')
+  let g:src_optionality_hits = []
+  try
+    call src#begin(getcwd() . '/tests/.tmp')
+    call src#('src-optionality-unreadable-dir-func', 1)
+    call src#end()
+  finally
+    call setfperm(root, 'rwx------')
+    call delete(root, 'd')
+  endtry
+
+Then:
+  AssertEqual [], g:src_optionality_hits

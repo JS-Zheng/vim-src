@@ -1,0 +1,51 @@
+Before:
+  let g:begin_workflow_hits = []
+  if exists(':Src') == 2
+    delcommand Src
+  endif
+  unlet! g:src
+
+After:
+  unlet! g:begin_workflow_hits
+  call src#end()
+  call src#end()
+  unlet! g:src
+
+
+Execute (src#begin supports the advanced explicit-base file workflow):
+  let g:begin_workflow_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/begin-workflow/root')
+  Src '10-root.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['10-root'], g:begin_workflow_hits
+
+
+Execute (src#begin supports nested relative scopes without an explicit init call):
+  let g:begin_workflow_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/begin-workflow/root')
+  Src '10-root.vim'
+  call src#begin('nested')
+  Src '20-child.vim'
+  call src#end()
+  Src '30-after.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['10-root', '20-child', '30-after'], g:begin_workflow_hits
+
+
+Execute (src#begin supports directory loading and optional missing targets in advanced usage):
+  " Confirms integration between scoping and directory loading, ensuring that
+  " directory expansion and optional target logic (! bang) operate correctly
+  " within an active custom base directory.
+
+  let g:begin_workflow_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/begin-workflow/root')
+  Src 'modules'
+  Src! 'local'
+  call src#end()
+
+Then:
+  AssertEqual ['10-alpha', '20-beta'], g:begin_workflow_hits

@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+shopt -s nullglob
+
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+TESTS_DIR="$ROOT_DIR/tests"
+SUITES_ROOT="$TESTS_DIR/suites"
+VADER_DIR="$ROOT_DIR/.deps/vader.vim"
+FILTER_AWK="$TESTS_DIR/lib/filter_vader_case.awk"
+
+VIM_BIN="${VIM_BIN:-vim}"
+
+TMP_DIR=""
+cleanup() {
+  [[ -n "${TMP_DIR:-}" && -d "$TMP_DIR" ]] && rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT HUP INT TERM
+
+require_vader() {
+  [[ -d "$VADER_DIR" ]] || {
+    echo "❌ vader.vim not found: $VADER_DIR"
+    exit 1
+  }
+}
+
+is_windows_platform() {
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+selected_suite_dirs() {
+  echo "$SUITES_ROOT/shared"
+  if is_windows_platform; then
+    echo "$SUITES_ROOT/windows"
+  else
+    echo "$SUITES_ROOT/unix"
+  fi
+}
+
+discover_suite_files() {
+  while IFS= read -r suite_dir; do
+    [[ -d "$suite_dir" ]] || continue
+    find "$suite_dir" -maxdepth 1 -type f -name '*.vader' | sort
+  done < <(selected_suite_dirs)
+}
+
+suite_glob_target() {
+  local parts=()
+  while IFS= read -r suite_dir; do
+    [[ -d "$suite_dir" ]] || continue
+    parts+=("$suite_dir/*.vader")
+  done < <(selected_suite_dirs)
+  printf '%s\n' "${parts[*]}"
+}
+
+resolve_suite_file() {
+  local suite="$1"
+  local candidate
+  if [[ "$suite" == *.vader ]]; then
+    candidate="$suite"
+  else
+    candidate="$suite.vader"
+  fi
+
+  if [[ -f "$candidate" ]]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+
+  while IFS= read -r suite_dir; do
+    [[ -f "$suite_dir/$candidate" ]] || continue
+    printf '%s\n' "$suite_dir/$candidate"
+    return 0
+  done < <(selected_suite_dirs)
+
+  return 1
+}
+
+# -----------------------------
+# parse args
+# -----------------------------
+SUITE="${SUITE:-}"
+CASE="${CASE:-}"
+DEBUG="${DEBUG:-0}"
+
+require_vader
+
+TMP_DIR="$(mktemp -d)"
+RUNNER_VIM="$TMP_DIR/run.vim"
+
+# -----------------------------
+# build runner.vim
+# -----------------------------
+cat > "$RUNNER_VIM" <<'VIM'
+let &runtimepath = $VADER_DIR .. ',' .. $ROOT_DIR .. ',' .. &runtimepath
+filetype off
+runtime plugin/vader.vim
+
+let s:mode = exists('$RUN_MODE') ? $RUN_MODE : ''
+let s:target = exists('$RUN_TARGET') ? $RUN_TARGET : ''
+
+if s:mode ==# 'glob'
+  execute 'Vader! ' .. s:target
+
+elseif s:mode ==# 'file'
+  execute 'Vader! ' .. fnameescape(s:target)
+
+elseif s:mode ==# 'list'
+  let s:suites = readfile(s:target)
+  if empty(s:suites)
+    cquit 1
+  endif
+  execute 'Vader! ' .. join(map(copy(s:suites), 'fnameescape(v:val)'), ' ')
+
+else
+  cquit 2
+endif
+
+if v:errors
+  cquit 1
+endif
+qa!
+VIM
+
+# -----------------------------
+# resolve run mode
+# -----------------------------
+RUN_MODE="glob"
+RUN_TARGET="$(suite_glob_target)"
+SUITE_FILES=()
+while IFS= read -r suite_file; do
+  SUITE_FILES+=("$suite_file")
+done < <(discover_suite_files)
+
+if [[ -z "$SUITE" ]]; then
+  :
+
+else
+  SUITE_FILE="$(resolve_suite_file "$SUITE" || true)"
+  [[ -f "$SUITE_FILE" ]] || {
+    echo "❌ suite not found: $SUITE"
+    exit 1
+  }
+
+  if [[ -z "$CASE" ]]; then
+    RUN_MODE="file"
+    RUN_TARGET="$SUITE_FILE"
+
+  else
+    RUN_MODE="file"
+    FILTERED="$TMP_DIR/filtered"
+    mkdir -p "$FILTERED"
+
+    awk -v pattern="$CASE" -f "$FILTER_AWK" \
+      "$SUITE_FILE" > "$FILTERED/$SUITE.vader"
+
+    RUN_MODE="file"
+    RUN_TARGET="$FILTERED/$SUITE.vader"
+  fi
+fi
+
+# -----------------------------
+# run vim
+# -----------------------------
+cd "$ROOT_DIR"
+
+export ROOT_DIR
+export VADER_DIR
+export RUN_MODE
+export RUN_TARGET
+
+"$VIM_BIN" -Nu NONE -n -i NONE -es -S "$RUNNER_VIM" < /dev/null

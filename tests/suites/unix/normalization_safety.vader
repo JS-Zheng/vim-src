@@ -1,0 +1,57 @@
+Before:
+  " Standard environment backup following existing suite patterns (e.g. default_base_dir.vader)
+  let g:src_test_save_home = exists('$HOME') ? $HOME : ''
+  let g:src_test_save_myvimrc = exists('$MYVIMRC') ? $MYVIMRC : ''
+  let g:src_norm_hit = ''
+  source plugin/src.vim
+  source autoload/src.vim
+
+After:
+  " Restoring environment to prevent test pollution
+  let $HOME = g:src_test_save_home
+  let $MYVIMRC = g:src_test_save_myvimrc
+  unlet! g:src_norm_hit
+  unlet! g:src_test_save_home
+  unlet! g:src_test_save_myvimrc
+  unlet! g:src
+  call src#end()
+
+
+Execute (Config home detection is immune to bracket globbing):
+  " Ensures that directories named with [] are treated literally by the
+  " discovery logic.
+
+  let $HOME = getcwd() .. '/tests/fixtures/normalization-safety/brackets/glob[ab]'
+  let $MYVIMRC = $HOME .. '/.vimrc'
+  let g:src_norm_hit = ''
+
+  Src 'default.vim'
+
+Then:
+  AssertEqual 'brackets', g:src_norm_hit
+
+
+Execute (Config home detection is immune to special Vim tokens like %):
+  " Validates that the discovery stage treats '%' literally and does not 
+  " trigger buffer-name expansion during path resolution.
+
+  let $HOME = getcwd() .. '/tests/fixtures/normalization-safety/percent/%'
+  let $MYVIMRC = $HOME .. '/.vimrc'
+  let g:src_norm_hit = ''
+
+  call src#begin()
+  Src 'default.vim'
+
+Then:
+  AssertEqual 'percent', g:src_norm_hit
+
+
+Execute (Src a file called '%'):
+  let $HOME = getcwd() .. '/tests/fixtures/normalization-safety/percent/%'
+  let $MYVIMRC = $HOME .. '/.vimrc'
+  let g:src_norm_hit = ''
+
+  Src '%'
+
+Then:
+  AssertEqual '%%%', g:src_norm_hit

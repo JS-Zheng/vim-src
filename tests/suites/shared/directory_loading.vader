@@ -1,0 +1,91 @@
+Before:
+  let g:src_directory_loading_hits = []
+  let g:src = {'follow_links': 1}
+  source plugin/src.vim
+
+After:
+  unlet! g:src_directory_loading_hits
+  unlet! g:src
+
+
+Execute (Src loads only direct child *.vim files from a directory when follow_links is enabled):
+  let g:src_directory_loading_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/directory-loading')
+  Src 'plain-main'
+  call src#end()
+
+Then:
+  AssertEqual ['10-first', '20-second', 'A-upper', 'a-lower'], g:src_directory_loading_hits
+
+
+Execute (Directory loading ignores hidden entries when follow_links is enabled):
+  let g:src_directory_loading_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/directory-loading')
+  Src 'plain-main'
+  call src#end()
+
+Then:
+  Assert index(g:src_directory_loading_hits, 'hidden') == -1
+
+
+Execute (Directory loading ignores non-.vim entries when follow_links is enabled):
+  let g:src_directory_loading_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/directory-loading')
+  Src 'plain-main'
+  call src#end()
+
+Then:
+  Assert index(g:src_directory_loading_hits, 'ignore-txt') == -1
+
+
+Execute (Directory loading ignores nested subdirectories when follow_links is enabled):
+  let g:src_directory_loading_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/directory-loading')
+  Src 'plain-main'
+  call src#end()
+
+Then:
+  Assert index(g:src_directory_loading_hits, '30-nested') == -1
+
+
+Execute (call src#() treats an empty directory as a successful no-op):
+  let g:src_directory_loading_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/directory-loading')
+  call src#('empty')
+  call src#end()
+
+Then:
+  AssertEqual [], g:src_directory_loading_hits
+
+
+Execute (Src treats an empty directory as a successful no-op):
+  let g:src_directory_loading_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/directory-loading')
+  Src 'empty'
+  call src#end()
+
+Then:
+  AssertEqual [], g:src_directory_loading_hits
+
+
+Execute (Src prefers an exact file target over a same-stem directory):
+  " Tests the 'exact match' precedence rule: if both 'name.vim' and 'name/'
+  " exist, explicit targeting should resolve to the file first.
+
+  let g:src_directory_loading_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/directory-loading/plain-main')
+  Src 'exact'
+  call src#end()
+
+Then:
+  AssertEqual ['exact-file'], g:src_directory_loading_hits
+
+
+Execute (call src#() prefers an exact file target over a same-stem directory):
+  let g:src_directory_loading_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/directory-loading/plain-main')
+  call src#('exact')
+  call src#end()
+
+Then:
+  AssertEqual ['exact-file'], g:src_directory_loading_hits

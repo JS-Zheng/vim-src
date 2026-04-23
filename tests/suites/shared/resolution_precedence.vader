@@ -1,0 +1,98 @@
+Before:
+  let g:src_resolution_precedence_hits = []
+  source plugin/src.vim
+
+After:
+  unlet! g:src
+  unlet! g:src_resolution_precedence_hits
+
+
+Execute (Without any active context, vim-src resolves targets from the default base):
+  let g:src_resolution_precedence_hits = []
+  let g:src = {
+        \ 'base_dir': getcwd() . '/tests/fixtures/resolution-precedence/home/.vim/vimrcs',
+        \ }
+  Src 'default-only.vim'
+
+Then:
+  AssertEqual ['default-only'], g:src_resolution_precedence_hits
+
+
+Execute (Current loading context takes precedence over the default base):
+  let g:src_resolution_precedence_hits = []
+  let g:src = {
+        \ 'base_dir': getcwd() . '/tests/fixtures/resolution-precedence/home/.vim/vimrcs',
+        \ }
+  Src 'entry/local-first.vim'
+
+Then:
+  AssertEqual ['entry-local-first', 'local-shared'], g:src_resolution_precedence_hits
+
+
+Execute (A missing target in the current loading context does not fall back to the default base):
+  " Enforces strict path isolation: if a target cannot be found relative to the
+  " current script, resolution should fail immediately rather than falling back
+  " to the global base, preventing accidental cross-directory loads.
+
+  let g:src_resolution_precedence_hits = []
+  let g:src = {
+        \ 'base_dir': getcwd() . '/tests/fixtures/resolution-precedence/home/.vim/vimrcs',
+        \ }
+  let error = ''
+
+  try
+    Src 'entry/missing-local.vim'
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual [], g:src_resolution_precedence_hits
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'
+
+
+Execute (An explicit src#begin() scope takes precedence over the current loading context):
+  let g:src_resolution_precedence_hits = []
+  let g:src = {
+        \ 'base_dir': getcwd() . '/tests/fixtures/resolution-precedence/home/.vim/vimrcs',
+        \ }
+  Src 'entry/begin-local-override.vim'
+
+Then:
+  AssertEqual ['entry-begin-local-override', 'child-shared'], g:src_resolution_precedence_hits
+
+
+Execute (A missing target in an explicit scope does not fall back to the current loading context):
+  let g:src_resolution_precedence_hits = []
+  let g:src = {
+        \ 'base_dir': getcwd() . '/tests/fixtures/resolution-precedence/home/.vim/vimrcs',
+        \ }
+  let error = ''
+
+  try
+    Src 'entry/begin-missing-local.vim'
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual ['entry-begin-missing-local'], g:src_resolution_precedence_hits
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'
+
+
+Execute (A missing target in an explicit scope does not fall back to the default base):
+  let g:src_resolution_precedence_hits = []
+  let g:src = {
+        \ 'base_dir': getcwd() . '/tests/fixtures/resolution-precedence/home/.vim/vimrcs',
+        \ }
+  let error = ''
+
+  try
+    Src 'entry/begin-missing-default.vim'
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual ['entry-begin-missing-default'], g:src_resolution_precedence_hits
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'
