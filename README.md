@@ -135,7 +135,8 @@ Rules:
 * only direct children
 * only `*.vim`
 * hidden files ignored
-* symlinks not followed (unless enabled)
+* explicit symlinked files and directories are resolved and loaded
+* symlinked `*.vim` children are loaded; directory children remain non-recursive
 
 ---
 
@@ -209,8 +210,10 @@ Common options:
 ```vim
 let g:src.base_dir = '~/.vim/vimrcs'
 let g:src.base_name = 'vimrcs'
-let g:src.follow_links = 1
 ```
+
+Symlinks are always followed. The former `follow_links` option is no longer
+supported.
 
 ---
 

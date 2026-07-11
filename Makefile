@@ -3,33 +3,37 @@ SHELL := bash
 
 VIM_BIN ?= vim
 
-.PHONY: test test-debug list-suites list-cases help
+.PHONY: setup test test-debug test-runner test-all list-suites list-cases help
+
+setup:
+	@tests/setup
 
 test:
 	@VIM_BIN=$(VIM_BIN) tests/run
 
 test-debug:
-	@DEBUG=1 VIM_BIN=$(VIM_BIN) tests/run
+	@DEBUG=1 KEEP_TMP=1 VIM_BIN=$(VIM_BIN) tests/run
+
+test-runner:
+	@tests/runner_contract.bash
+
+test-all: test-runner test
 
 list-suites:
-	@find tests/suites/shared $(if $(filter MINGW% MSYS% CYGWIN%,$(shell uname -s)),tests/suites/windows,tests/suites/unix) -maxdepth 1 -name '*.vader' -print \
-		| xargs -n1 basename | sed 's/.vader$$//' | sort
+	@tests/run --list-suites
 
 list-cases:
 ifndef SUITE
 	$(error Usage: make list-cases SUITE=xxx)
 endif
-	@SUITE_FILE=$$(find tests/suites/shared $(if $(filter MINGW% MSYS% CYGWIN%,$(shell uname -s)),tests/suites/windows,tests/suites/unix) -maxdepth 1 -name '$(SUITE).vader' -print -quit); \
-	if [ -z "$$SUITE_FILE" ]; then \
-		echo "suite not found: $(SUITE)"; \
-		exit 1; \
-	fi; \
-	awk '/^Execute/ {print}' "$$SUITE_FILE"
+	@SUITE= CASE= tests/run --list-cases "$(SUITE)"
 
 help:
 	@echo "make test"
 	@echo "make test SUITE=xxx"
 	@echo "make test SUITE=xxx CASE=pattern"
 	@echo "make test-debug"
+	@echo "make test-runner"
+	@echo "make test-all"
 	@echo "make list-suites"
 	@echo "make list-cases SUITE=xxx"

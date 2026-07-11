@@ -4,6 +4,8 @@ Before:
 
 After:
   unlet! g:caught
+  unlet! g:src_unreadable_child_hit
+  unlet! g:src_readable_child_hit
 
 
 Execute (Src throws a stable not-found error for a broken symlink target):
@@ -19,6 +21,43 @@ Execute (Src throws a stable not-found error for a broken symlink target):
     let error = v:exception
   finally
     call src#end()
+    call delete(root, 'rf')
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'
+
+
+Execute (A listable directory without search permission is unreadable):
+  let root = tempname()
+  call mkdir(root, 'p')
+  call writefile(['let g:src_permission_probe = 1'], root .. '/child.vim')
+  call SrcTestSetUnixMode(root, '400')
+  let error = ''
+  try
+    call src#(root)
+  catch
+    let error = v:exception
+  finally
+    call SrcTestSetUnixMode(root, '700')
+    call delete(root, 'rf')
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'
+
+
+Execute (An empty searchable directory without read permission is unreadable):
+  let root = tempname()
+  call mkdir(root, 'p')
+  call SrcTestSetUnixMode(root, '100')
+  let error = ''
+  try
+    call src#(root)
+  catch
+    let error = v:exception
+  finally
+    call SrcTestSetUnixMode(root, '700')
     call delete(root, 'rf')
   endtry
 
@@ -82,3 +121,41 @@ Execute (Src throws a stable unreadable directory error):
 
 Then:
   Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'
+
+
+Execute (An unreadable directory child is an invalid target):
+  let root = tempname()
+  call mkdir(root, 'p')
+  call writefile(['let g:src_unreadable_child_hit = 1'], root .. '/child.vim')
+  call SrcTestSetUnixMode(root .. '/child.vim', '000')
+  let error = ''
+  try
+    call src#(root)
+  catch
+    let error = v:exception
+  finally
+    call SrcTestSetUnixMode(root .. '/child.vim', '600')
+    call delete(root, 'rf')
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'
+  Assert !exists('g:src_unreadable_child_hit')
+
+
+Execute (Optional directory loading skips an unreadable child):
+  let root = tempname()
+  call mkdir(root, 'p')
+  call writefile(['let g:src_unreadable_child_hit = 1'], root .. '/10-unreadable.vim')
+  call writefile(['let g:src_readable_child_hit = 1'], root .. '/20-readable.vim')
+  call SrcTestSetUnixMode(root .. '/10-unreadable.vim', '000')
+  try
+    call src#(root, 1)
+  finally
+    call SrcTestSetUnixMode(root .. '/10-unreadable.vim', '600')
+    call delete(root, 'rf')
+  endtry
+
+Then:
+  Assert !exists('g:src_unreadable_child_hit')
+  AssertEqual 1, g:src_readable_child_hit

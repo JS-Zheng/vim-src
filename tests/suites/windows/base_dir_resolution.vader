@@ -1,0 +1,63 @@
+Before:
+  let g:src_test_save_home = exists('$HOME') ? $HOME : ''
+  let g:src_test_save_xdg = exists('$XDG_CONFIG_HOME') ? $XDG_CONFIG_HOME : ''
+  let g:src_test_save_myvimrc = exists('$MYVIMRC') ? $MYVIMRC : ''
+  let g:src_test_save_vim = exists('$VIM') ? $VIM : ''
+  let g:src_test_save_vimruntime = exists('$VIMRUNTIME') ? $VIMRUNTIME : ''
+  let g:src_default_base_hits = []
+  source plugin/src.vim
+  source autoload/src.vim
+  source tests/lib/test_helper.vim
+
+After:
+  call src#end()
+  let $HOME = g:src_test_save_home
+  let $XDG_CONFIG_HOME = g:src_test_save_xdg
+  let $MYVIMRC = g:src_test_save_myvimrc
+  let $VIM = g:src_test_save_vim
+  let $VIMRUNTIME = g:src_test_save_vimruntime
+  unlet! g:src
+  unlet! g:src_default_base_hits
+  unlet! g:src_test_save_home
+  unlet! g:src_test_save_xdg
+  unlet! g:src_test_save_myvimrc
+  unlet! g:src_test_save_vim
+  unlet! g:src_test_save_vimruntime
+
+
+Execute (Named mode resolves HOME vimfiles on Windows):
+  let $HOME = getcwd() . '/tests/fixtures/default-base/vim'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = ''
+  let $VIM = ''
+  let $VIMRUNTIME = ''
+  let g:src = {'base_name': 'vimrcs'}
+  call src#begin()
+  Src 'default.vim'
+  call src#end()
+
+Then:
+  call SrcTestAssertEqual(['vim'], g:src_default_base_hits, {
+        \ 'case': 'windows named HOME vimfiles resolution',
+        \ 'target': $HOME,
+        \ 'cwd': getcwd(),
+        \ })
+
+
+Execute (Canonical mode resolves HOME vimfiles on Windows):
+  let $HOME = getcwd() . '/tests/fixtures/default-base/vim'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = ''
+  let $VIM = ''
+  let $VIMRUNTIME = ''
+  let g:src = {'base_name': ''}
+  call src#begin()
+  Src 'default.vim'
+  call src#end()
+
+Then:
+  call SrcTestAssertEqual(['vim-canonical'], g:src_default_base_hits, {
+        \ 'case': 'windows canonical HOME vimfiles resolution',
+        \ 'target': $HOME,
+        \ 'cwd': getcwd(),
+        \ })

@@ -1,0 +1,172 @@
+Before:
+  unlet! g:src
+  source plugin/src.vim
+  source autoload/src.vim
+
+After:
+  call src#end()
+  unlet! g:src
+
+
+Execute (src#() rejects a non-String target):
+  let error = ''
+  try
+    call src#(123)
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual 'src: ' .. g:src#ERR_INVALID_ARG .. ': target must be a String or List of Strings', error
+
+
+Execute (src#() identifies a non-String list element):
+  let error = ''
+  try
+    call src#(['ok.vim', {}])
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual 'src: ' .. g:src#ERR_INVALID_ARG .. ': target[1] must be a String', error
+
+
+Execute (src#() rejects a container optional flag):
+  let error = ''
+  try
+    call src#('missing.vim', [])
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual 'src: ' .. g:src#ERR_INVALID_ARG .. ': optional must be a Number, Float, or Boolean', error
+
+
+Execute (src#() accepts Float scalar truthiness for optional mode):
+  let g:src = {'base_dir': getcwd() .. '/tests/fixtures/base-dir/existing'}
+  let error = ''
+  try
+    call src#('missing.vim', 1.0)
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual '', error
+
+
+Execute (src#() rejects String boolean values):
+  let error = ''
+  try
+    call src#('missing.vim', 'true')
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual 'src: ' .. g:src#ERR_INVALID_ARG .. ': optional must be a Number, Float, or Boolean', error
+
+
+Execute (src#begin() rejects a non-String path):
+  let error = ''
+  try
+    call src#begin({})
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual 'src: ' .. g:src#ERR_INVALID_ARG .. ': path must be a String', error
+
+
+Execute (src#begin() rejects the removed options argument):
+  let error = ''
+  try
+    call src#begin(getcwd(), {})
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual 'src: ' .. g:src#ERR_INVALID_ARG .. ': unexpected argument count', error
+
+
+Execute (src#cmd() rejects the removed follow_links option):
+  let error = ''
+  try
+    call src#cmd(0, 'missing.vim', {'follow_links': 1})
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual 'src: ' .. g:src#ERR_INVALID_ARG .. ': unsupported option: follow_links', error
+
+
+Execute (src#cmd() rejects a container if option):
+  let error = ''
+  try
+    call src#cmd(0, 'missing.vim', {'if': {}})
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual 'src: ' .. g:src#ERR_INVALID_ARG .. ': if must be a Number, Float, or Boolean', error
+
+
+Execute (g:src.base_dir must be a String):
+  let g:src = {'base_dir': []}
+  let error = ''
+  try
+    call src#('missing.vim')
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual 'src: ' .. g:src#ERR_INVALID_ARG .. ': g:src.base_dir must be a String', error
+
+
+Execute (g:src.base_name must be a String):
+  let g:src = {'base_name': {}}
+  let error = ''
+  try
+    call src#('missing.vim')
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual 'src: ' .. g:src#ERR_INVALID_ARG .. ': g:src.base_name must be a String', error
+
+
+Execute (g:src.def_commands rejects a container):
+  let g:src = {'def_commands': {}}
+  let error = ''
+  try
+    call src#init()
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual 'src: ' .. g:src#ERR_INVALID_ARG .. ': g:src.def_commands must be a Number, Float, or Boolean', error
+
+
+Execute (g:src.debug rejects a Funcref):
+  let g:src = {
+        \ 'base_dir': getcwd() .. '/tests/fixtures/base-dir/existing',
+        \ 'debug': function('tr'),
+        \ }
+  let error = ''
+  try
+    call src#('default.vim')
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual 'src: ' .. g:src#ERR_INVALID_ARG .. ': g:src.debug must be a Number, Float, or Boolean', error

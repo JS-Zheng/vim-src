@@ -64,3 +64,35 @@ Execute (Directory-child failure should not leak context or scope state):
 
 Then:
   AssertEqual ['dir-ok', 'base'], g:src_stack_cleanup_hits
+
+
+Execute (Unmatched src#end inside a sourced file cannot pop the caller scope):
+  let g:src_stack_cleanup_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/stack-cleanup/outer')
+  Src 'unmatched-end.vim'
+  Src 'good.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['outer'], g:src_stack_cleanup_hits
+
+
+Execute (A sourced file cannot replace its caller scope at the same stack depth):
+  let g:src_stack_cleanup_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/stack-cleanup/outer')
+  Src 'replacement-scope.vim'
+  Src 'good.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['outer'], g:src_stack_cleanup_hits
+
+
+Execute (Unmatched src#end cannot remove a directory loading context):
+  let g:src_stack_cleanup_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/stack-cleanup')
+  Src 'over-pop-dir'
+  call src#end()
+
+Then:
+  AssertEqual ['dir-over-pop-safe'], g:src_stack_cleanup_hits

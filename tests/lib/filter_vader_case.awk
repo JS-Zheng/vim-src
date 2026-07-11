@@ -1,14 +1,28 @@
 BEGIN {
   keep_current = 0
   current_kind = ""
-  case_count = split(case_specs, case_patterns, "\n")
+  case_count = 0
+  if (case_file != "") {
+    while ((getline pattern < case_file) > 0) {
+      case_patterns[++case_count] = pattern
+    }
+    close(case_file)
+  } else {
+    case_count = split(case_specs, case_patterns, "\n")
+  }
 }
 
 function is_header(line) {
+  if (line ~ /^Include([[:space:]]*\([^)]*\))?[[:space:]]*:[[:space:]]*[^[:space:]]/) {
+    return 1
+  }
   return line ~ /^(Before|After|Given|Execute|Do|Then|Expect|Include)([[:space:](].*)?[:;][[:space:]]*$/
 }
 
 function header_kind(line,   kind) {
+  if (line ~ /^Include([[:space:]]*\([^)]*\))?[[:space:]]*:/) {
+    return "Include"
+  }
   kind = line
   sub(/[[:space:](].*$/, "", kind)
   sub(/[:;]$/, "", kind)

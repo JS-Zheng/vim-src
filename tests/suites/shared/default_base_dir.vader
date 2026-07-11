@@ -70,6 +70,21 @@ Then:
   AssertEqual ['home-xdg-only'], g:src_default_base_hits
 
 
+Execute (Default base dir ignores a relative XDG_CONFIG_HOME):
+  let $HOME = getcwd() . '/tests/fixtures/default-base/home-xdg-only'
+  let $XDG_CONFIG_HOME = 'tests/fixtures/default-base/xdg'
+  let $MYVIMRC = ''
+  let $VIM = ''
+  let $VIMRUNTIME = ''
+  let g:src_default_base_hits = []
+  call src#begin()
+  Src 'default.vim'
+  call src#end()
+
+Then:
+  AssertEqual ['home-xdg-only'], g:src_default_base_hits
+
+
 Execute (Default base dir respects g:src.base_dir override):
   " Validates that an explicit g:src.base_dir configuration takes absolute
   " precedence over any environment-based discovery logic.

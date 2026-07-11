@@ -10,28 +10,53 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        editor:
-          - vim
-          - nvim
+        include:
+          - editor: vim
+            version: stable
+          - editor: vim
+            version: v8.2.0000
+          - editor: nvim
+            version: stable
+          - editor: nvim
+            version: v0.4.4
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Install Vim
-        if: matrix.editor == 'vim'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y vim
-
-      - name: Install Neovim
-        if: matrix.editor == 'nvim'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y neovim
+      - name: Install editor
+        uses: rhysd/action-setup-vim@febef33995d6649302e9d88dda81e071b68f16a7 # v1
+        with:
+          version: ${{ matrix.version }}
+          neovim: ${{ matrix.editor == 'nvim' }}
 
       - name: Bootstrap test dependencies
         run: tests/setup
 
-      - name: Run test suite
-        run: make test VIM_BIN=${{ matrix.editor }}
+      - name: Run validation suite
+        run: make test-all VIM_BIN=${{ matrix.editor }}
+
+  windows-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Check out vader.vim
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: junegunn/vader.vim
+          ref: 429b669e6158be3a9fc110799607c232e6ed8e29
+          path: .deps/vader.vim
+
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@febef33995d6649302e9d88dda81e071b68f16a7 # v1
+        with:
+          version: stable
+          neovim: true
+
+      - name: Run Windows validation suite
+        run: python tests/run.py
+        env:
+          VIM_BIN: nvim

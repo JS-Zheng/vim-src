@@ -3,6 +3,12 @@
 This directory is the canonical home for `vim-src` test tooling, fixtures, and
 test suites.
 
+The Unix runner and its contract scripts support the macOS system Bash baseline:
+Bash 3.2 or newer. Do not introduce associative arrays, `mapfile`, case-changing
+parameter expansion, or other Bash 4+ syntax.
+
+The cross-platform Python runner supports Python 3.8 or newer.
+
 If you want to understand how to run or extend the test suite, start here.
 
 The actual test scripts live in `tests/`. For day-to-day convenience, the repo
@@ -20,6 +26,7 @@ Convenience commands:
 
 - `make setup`
 - `make test`
+- `make test-runner`
 - `make test-all`
 - `make list-suites`
 - `make list-cases SUITE=<suite>`
@@ -42,6 +49,24 @@ Run the full suite:
 make test-all
 
 tests/run
+```
+
+Inspect generated runner state and retain temporary artifacts:
+
+```sh
+make test-debug
+
+DEBUG=1 KEEP_TMP=1 tests/run --suite src_command
+```
+
+`DEBUG=1` prints the resolved editor command, mode, target, temporary path, and
+generated Vimscript. `KEEP_TMP=1` preserves that directory after exit; either
+flag can be used independently.
+
+Validate runner selection/filtering contracts without launching the real editor:
+
+```sh
+make test-runner
 ```
 
 Run one suite:
@@ -92,9 +117,12 @@ tests/run --list-cases src_command
 Case filtering is based on substring matching against `Execute` / `Do` header
 lines in `.vader` files.
 
-When `--case` is used, `tests/run` generates temporary filtered suites that
-preserve global `Before`, `After`, `Given`, and `Include` blocks together with
-the matching cases.
+When `--case` is used, the runner generates temporary filtered suites that
+preserve global `Before`, `After`, and `Given` blocks together with matching
+cases. Plain and typed `Include` macros are preserved with paths resolved
+relative to the original suite. Their referenced files must be setup/cleanup
+fragments without test cases. Case-bearing, nested, or unresolvable includes
+fail before Vim starts. Empty `--case` patterns are rejected.
 
 This is intended to support fast TDD loops without running the full suite on
 every edit.

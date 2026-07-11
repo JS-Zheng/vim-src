@@ -6,11 +6,17 @@ ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 DEPS_DIR="$ROOT_DIR/.deps"
 VADER_DIR="$DEPS_DIR/vader.vim"
 VADER_REPO="https://github.com/junegunn/vader.vim"
+VADER_REVISION="429b669e6158be3a9fc110799607c232e6ed8e29"
 
 mkdir -p "$DEPS_DIR"
 
-if [ -d "$VADER_DIR/.git" ]; then
-  printf '%s\n' "vader.vim already installed at $VADER_DIR"
+if git -C "$VADER_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+  if ! git -C "$VADER_DIR" cat-file -e "$VADER_REVISION^{commit}" 2>/dev/null; then
+    printf '%s\n' "fetching vader.vim $VADER_REVISION"
+    git -C "$VADER_DIR" fetch --depth 1 "$VADER_REPO" "$VADER_REVISION"
+  fi
+  printf '%s\n' "using vader.vim $VADER_REVISION at $VADER_DIR"
+  git -C "$VADER_DIR" checkout --quiet --detach "$VADER_REVISION"
   exit 0
 fi
 
@@ -21,3 +27,4 @@ fi
 
 printf '%s\n' "cloning vader.vim into $VADER_DIR"
 git clone "$VADER_REPO" "$VADER_DIR"
+git -C "$VADER_DIR" checkout --quiet --detach "$VADER_REVISION"

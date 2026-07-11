@@ -115,6 +115,19 @@ Then:
   AssertEqual ['one'], g:src_test_loaded
 
 
+Execute (Src without arguments sources memory for a named special buffer):
+  let g:src_test_loaded = []
+  enew
+  execute 'file' fnameescape(getcwd() . '/tests/fixtures/src-command/one.vim')
+  setlocal buftype=nofile
+  call setline(1, ["let g:src_test_loaded = ['special-buffer-memory']"])
+  Src
+  bwipe!
+
+Then:
+  AssertEqual ['special-buffer-memory'], g:src_test_loaded
+
+
 Execute (Src without arguments uses modified named buffer contents):
   " Validates that Src captures the unsaved memory state of a buffer rather
   " than just re-reading the file from disk, ensuring a smooth live-reload
@@ -164,6 +177,18 @@ Execute (call src#([]) is a no-op, not current-buffer mode):
 
 Then:
   AssertEqual [], g:src_test_loaded
+
+
+Execute (call src#() rejects more than two arguments):
+  let error = ''
+  try
+    call src#('one.vim', 0, {})
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual 'src: ' .. g:src#ERR_INVALID_ARG .. ': unexpected argument count', error
 
 
 Execute (Src rejects a single bare word path):

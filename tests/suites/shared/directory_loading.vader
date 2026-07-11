@@ -1,6 +1,5 @@
 Before:
   let g:src_directory_loading_hits = []
-  let g:src = {'follow_links': 1}
   source plugin/src.vim
 
 After:
@@ -8,7 +7,7 @@ After:
   unlet! g:src
 
 
-Execute (Src loads only direct child *.vim files from a directory when follow_links is enabled):
+Execute (Src loads only direct child *.vim files from a directory):
   let g:src_directory_loading_hits = []
   call src#begin(getcwd() . '/tests/fixtures/directory-loading')
   Src 'plain-main'
@@ -18,7 +17,7 @@ Then:
   AssertEqual ['10-first', '20-second', 'A-upper', 'a-lower'], g:src_directory_loading_hits
 
 
-Execute (Directory loading ignores hidden entries when follow_links is enabled):
+Execute (Directory loading ignores hidden entries):
   let g:src_directory_loading_hits = []
   call src#begin(getcwd() . '/tests/fixtures/directory-loading')
   Src 'plain-main'
@@ -28,7 +27,7 @@ Then:
   Assert index(g:src_directory_loading_hits, 'hidden') == -1
 
 
-Execute (Directory loading ignores non-.vim entries when follow_links is enabled):
+Execute (Directory loading ignores non-.vim entries):
   let g:src_directory_loading_hits = []
   call src#begin(getcwd() . '/tests/fixtures/directory-loading')
   Src 'plain-main'
@@ -38,7 +37,7 @@ Then:
   Assert index(g:src_directory_loading_hits, 'ignore-txt') == -1
 
 
-Execute (Directory loading ignores nested subdirectories when follow_links is enabled):
+Execute (Directory loading ignores nested subdirectories):
   let g:src_directory_loading_hits = []
   call src#begin(getcwd() . '/tests/fixtures/directory-loading')
   Src 'plain-main'
@@ -62,6 +61,16 @@ Execute (Src treats an empty directory as a successful no-op):
   let g:src_directory_loading_hits = []
   call src#begin(getcwd() . '/tests/fixtures/directory-loading')
   Src 'empty'
+  call src#end()
+
+Then:
+  AssertEqual [], g:src_directory_loading_hits
+
+
+Execute (A directory containing only hidden files is a successful no-op):
+  let g:src_directory_loading_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/directory-loading')
+  Src 'hidden-only'
   call src#end()
 
 Then:

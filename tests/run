@@ -6,16 +6,24 @@ shopt -s nullglob
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 TESTS_DIR="$ROOT_DIR/tests"
 SUITES_ROOT="$TESTS_DIR/suites"
-VADER_DIR="$ROOT_DIR/.deps/vader.vim"
+VADER_DIR="${VADER_DIR:-$ROOT_DIR/.deps/vader.vim}"
 FILTER_AWK="$TESTS_DIR/lib/filter_vader_case.awk"
 
 VIM_BIN="${VIM_BIN:-vim}"
+DEBUG="${DEBUG:-0}"
+KEEP_TMP="${KEEP_TMP:-0}"
 
 TMP_DIR=""
 cleanup() {
-  [[ -n "${TMP_DIR:-}" && -d "$TMP_DIR" ]] && rm -rf "$TMP_DIR"
+  if [[ "$KEEP_TMP" != 1 && -n "${TMP_DIR:-}" && -d "$TMP_DIR" ]]; then
+    rm -rf "$TMP_DIR"
+  fi
+  return 0
 }
-trap cleanup EXIT HUP INT TERM
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 require_vader() {
   [[ -d "$VADER_DIR" ]] || {
@@ -47,12 +55,70 @@ discover_suite_files() {
   done < <(selected_suite_dirs)
 }
 
+validate_unique_suites() {
+  local duplicate
+  duplicate="$(
+    discover_suite_files \
+      | awk -F/ '{ name=$NF; sub(/\.vader$/, "", name); count[name]++ }
+          END { for (name in count) if (count[name] > 1) print name }' \
+      | sort \
+      | sed -n '1p'
+  )"
+  [[ -z "$duplicate" ]] || {
+    echo "error: duplicate suite name: $duplicate" >&2
+    exit 1
+  }
+}
+
+prepare_case_suite() {
+  local suite_file="$1"
+  local output_file="$2"
+  local suite_dir line include_prefix include_spec include_file include_dir
+  local include_re='^Include([[:space:]]*\([^)]*\))?[[:space:]]*:[[:space:]]*(.*)$'
+  local windows_abs_re='^[A-Za-z]:[/\\]'
+  suite_dir="$(CDPATH= cd -- "$(dirname "$suite_file")" && pwd)"
+  : > "$output_file"
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ $include_re ]]; then
+      include_prefix="Include${BASH_REMATCH[1]}"
+      include_spec="${BASH_REMATCH[2]}"
+    else
+      printf '%s\n' "$line" >> "$output_file"
+      continue
+    fi
+
+    include_spec="$(printf '%s\n' "$include_spec" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    if [[ "$include_spec" == /* || "$include_spec" =~ $windows_abs_re ]]; then
+      include_file="$include_spec"
+    else
+      include_file="$suite_dir/$include_spec"
+    fi
+    [[ -f "$include_file" ]] || {
+      echo "error: cannot inspect Vader Include during case filtering: $include_spec" >&2
+      return 1
+    }
+    if grep -Eq '^Include([[:space:]]*\([^)]*\))?[[:space:]]*:[[:space:]]*[^[:space:]]' "$include_file"; then
+      echo "error: nested Vader Include is not supported during case filtering: $include_spec" >&2
+      return 1
+    fi
+    if grep -Eq '^(Execute|Do)([[:space:](].*)?[:;][[:space:]]*$' "$include_file"; then
+      echo "error: included Vader file contains test cases: $include_spec" >&2
+      return 1
+    fi
+    include_dir="$(CDPATH= cd -- "$(dirname "$include_file")" && pwd)"
+    include_file="$include_dir/$(basename "$include_file")"
+    printf '%s: %s\n' "$include_prefix" "$include_file" >> "$output_file"
+  done < "$suite_file"
+}
+
 suite_glob_target() {
-  local parts=()
-  while IFS= read -r suite_dir; do
-    [[ -d "$suite_dir" ]] || continue
-    parts+=("$suite_dir/*.vader")
-  done < <(selected_suite_dirs)
+  local parts=("tests/suites/shared/*.vader")
+  if is_windows_platform; then
+    parts+=("tests/suites/windows/*.vader")
+  else
+    parts+=("tests/suites/unix/*.vader")
+  fi
   printf '%s\n' "${parts[*]}"
 }
 
@@ -82,9 +148,99 @@ resolve_suite_file() {
 # -----------------------------
 # parse args
 # -----------------------------
-SUITE="${SUITE:-}"
-CASE="${CASE:-}"
-DEBUG="${DEBUG:-0}"
+SUITES=()
+CASES=()
+[[ -n "${SUITE:-}" ]] && SUITES+=("$SUITE")
+[[ -n "${CASE:-}" ]] && CASES+=("$CASE")
+LIST_SUITES=0
+LIST_CASES_SUITE=""
+
+usage() {
+  cat <<'EOF'
+Usage: tests/run [SUITE] [--suite SUITE ...] [--case PATTERN ...]
+       tests/run --list-suites
+       tests/run --list-cases SUITE
+EOF
+}
+
+while (($#)); do
+  case "$1" in
+    --suite)
+      (($# >= 2)) || { echo "error: --suite requires a value" >&2; exit 2; }
+      SUITES+=("$2")
+      shift 2
+      ;;
+    --case)
+      (($# >= 2)) || { echo "error: --case requires a value" >&2; exit 2; }
+      CASES+=("$2")
+      shift 2
+      ;;
+    --list-suites)
+      LIST_SUITES=1
+      shift
+      ;;
+    --list-cases)
+      (($# >= 2)) || { echo "error: --list-cases requires a suite" >&2; exit 2; }
+      LIST_CASES_SUITE="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      while (($#)); do
+        SUITES+=("$1")
+        shift
+      done
+      ;;
+    -*)
+      echo "error: unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+    *)
+      SUITES+=("$1")
+      shift
+      ;;
+  esac
+done
+
+validate_unique_suites
+if ((${#CASES[@]})); then
+  for case_pattern in "${CASES[@]}"; do
+    [[ -n "$case_pattern" ]] || {
+      echo "error: case pattern must not be empty" >&2
+      exit 2
+    }
+  done
+fi
+
+if ((LIST_SUITES)); then
+  ((${#SUITES[@]} == 0 && ${#CASES[@]} == 0)) || {
+    echo "error: --list-suites cannot be combined with suite/case selection" >&2
+    exit 2
+  }
+  while IFS= read -r suite_file; do
+    basename "$suite_file" .vader
+  done < <(discover_suite_files) | sort
+  exit 0
+fi
+
+if [[ -n "$LIST_CASES_SUITE" ]]; then
+  ((${#SUITES[@]} == 0 && ${#CASES[@]} == 0)) || {
+    echo "error: --list-cases cannot be combined with suite/case selection" >&2
+    exit 2
+  }
+  SUITE_FILE="$(resolve_suite_file "$LIST_CASES_SUITE" || true)"
+  [[ -f "$SUITE_FILE" ]] || {
+    echo "error: suite not found: $LIST_CASES_SUITE" >&2
+    exit 1
+  }
+  awk '/^(Execute|Do)([[:space:](].*)?[:;][[:space:]]*$/ {print}' "$SUITE_FILE"
+  exit 0
+fi
 
 require_vader
 
@@ -95,7 +251,8 @@ RUNNER_VIM="$TMP_DIR/run.vim"
 # build runner.vim
 # -----------------------------
 cat > "$RUNNER_VIM" <<'VIM'
-let &runtimepath = $VADER_DIR .. ',' .. $ROOT_DIR .. ',' .. &runtimepath
+execute 'set runtimepath^=' .. fnameescape($ROOT_DIR)
+execute 'set runtimepath^=' .. fnameescape($VADER_DIR)
 filetype off
 runtime plugin/vader.vim
 
@@ -135,31 +292,54 @@ while IFS= read -r suite_file; do
   SUITE_FILES+=("$suite_file")
 done < <(discover_suite_files)
 
-if [[ -z "$SUITE" ]]; then
-  :
-
+SELECTED=()
+if ((${#SUITES[@]})); then
+  for suite in "${SUITES[@]}"; do
+    SUITE_FILE="$(resolve_suite_file "$suite" || true)"
+    [[ -f "$SUITE_FILE" ]] || {
+      echo "error: suite not found: $suite" >&2
+      exit 1
+    }
+    SELECTED+=("$SUITE_FILE")
+  done
 else
-  SUITE_FILE="$(resolve_suite_file "$SUITE" || true)"
-  [[ -f "$SUITE_FILE" ]] || {
-    echo "❌ suite not found: $SUITE"
+  SELECTED=("${SUITE_FILES[@]}")
+fi
+
+if ((${#CASES[@]})); then
+  FILTERED="$TMP_DIR/filtered"
+  mkdir -p "$FILTERED"
+  FILTERED_SUITES=()
+  CASE_SPECS_FILE="$TMP_DIR/case-patterns.txt"
+  printf '%s\n' "${CASES[@]}" > "$CASE_SPECS_FILE"
+  index=0
+  for suite_file in "${SELECTED[@]}"; do
+    prepared_file="$FILTERED/$(printf '%03d' "$index")-prepared-$(basename "$suite_file")"
+    prepare_case_suite "$suite_file" "$prepared_file"
+    filtered_file="$FILTERED/$(printf '%03d' "$index")-$(basename "$suite_file")"
+    awk -v case_file="$CASE_SPECS_FILE" -f "$FILTER_AWK" \
+      "$prepared_file" > "$filtered_file"
+    if grep -Eq '^(Execute|Do)([[:space:](].*)?[:;][[:space:]]*$' "$filtered_file"; then
+      FILTERED_SUITES+=("$filtered_file")
+    fi
+    ((index += 1))
+  done
+  ((${#FILTERED_SUITES[@]})) || {
+    echo "error: no test case matched the requested pattern(s)" >&2
     exit 1
   }
+  SELECTED=("${FILTERED_SUITES[@]}")
+fi
 
-  if [[ -z "$CASE" ]]; then
-    RUN_MODE="file"
-    RUN_TARGET="$SUITE_FILE"
-
-  else
-    RUN_MODE="file"
-    FILTERED="$TMP_DIR/filtered"
-    mkdir -p "$FILTERED"
-
-    awk -v pattern="$CASE" -f "$FILTER_AWK" \
-      "$SUITE_FILE" > "$FILTERED/$SUITE.vader"
-
-    RUN_MODE="file"
-    RUN_TARGET="$FILTERED/$SUITE.vader"
-  fi
+if ((${#SUITES[@]} == 0 && ${#CASES[@]} == 0)); then
+  :
+elif ((${#SELECTED[@]} == 1)); then
+  RUN_MODE="file"
+  RUN_TARGET="${SELECTED[0]}"
+else
+  RUN_MODE="list"
+  RUN_TARGET="$TMP_DIR/suites.txt"
+  printf '%s\n' "${SELECTED[@]}" > "$RUN_TARGET"
 fi
 
 # -----------------------------
@@ -171,5 +351,19 @@ export ROOT_DIR
 export VADER_DIR
 export RUN_MODE
 export RUN_TARGET
+
+if [[ "$DEBUG" == 1 ]]; then
+  printf '%s\n' \
+    "ROOT_DIR=$ROOT_DIR" \
+    "VADER_DIR=$VADER_DIR" \
+    "VIM_BIN=$VIM_BIN" \
+    "RUN_MODE=$RUN_MODE" \
+    "RUN_TARGET=$RUN_TARGET" \
+    "RUNNER_VIM=$RUNNER_VIM" \
+    "TMP_DIR=$TMP_DIR"
+  printf '%s\n' '----- run.vim -----'
+  sed -n '1,240p' "$RUNNER_VIM"
+  printf '%s\n' '-------------------'
+fi
 
 "$VIM_BIN" -Nu NONE -n -i NONE -es -S "$RUNNER_VIM" < /dev/null

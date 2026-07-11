@@ -87,15 +87,22 @@ Then:
 
 Execute (Readable sourced script failures emit source context and original error):
   let error = ''
+  let messages = ''
   let path = getcwd() .. '/tests/fixtures/error-contract/broken.vim'
+  redir => messages
+  silent echomsg ''
   try
-    call src#(path)
+    silent call src#(path)
   catch
     let error = v:exception
   endtry
+  redir END
 
 Then:
   Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':'
+  Assert messages =~# '\[vim-src\] source failed: ' .. escape(path, '\')
+  Assert messages =~# '\[vim-src\] original error:'
+  Assert messages =~# '\[vim-src\] throwpoint:'
 
 
 Execute (Current-buffer failure from a named file buffer is wrapped as stable src error):

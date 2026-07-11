@@ -4,6 +4,7 @@ Before:
   endif
   unlet! g:src
   unlet! g:loaded_src
+  source autoload/src.vim
 
 After:
   if exists(':Src') == 2
@@ -47,6 +48,44 @@ Execute (src#init() is idempotent):
 Then:
   Assert exists(':Src') == 2
   Assert type(g:src) == v:t_dict
+
+
+Execute (src#init() preserves a foreign Src command and reports the collision):
+  let g:src_foreign_command_hit = 0
+  command! Src let g:src_foreign_command_hit = 1
+  let messages = ''
+  redir => messages
+  silent call src#init()
+  redir END
+  Src
+
+Then:
+  AssertEqual 1, g:src_foreign_command_hit
+  Assert messages =~# '\[vim-src\] command collision: :Src already exists'
+  unlet! g:src_foreign_command_hit
+
+
+Execute (src#init() does not infer ownership from foreign command text):
+  let g:src_foreign_command_hit = 0
+  command! Src let g:src_foreign_command_hit = 'src#cmd'
+  let messages = ''
+  redir => messages
+  silent call src#init()
+  redir END
+  Src
+
+Then:
+  AssertEqual 'src#cmd', g:src_foreign_command_hit
+  Assert messages =~# '\[vim-src\] command collision: :Src already exists'
+  unlet! g:src_foreign_command_hit
+
+
+Execute (src#def_cmds() explicitly replaces a foreign Src command):
+  command! Src echo 'foreign'
+  call src#def_cmds()
+
+Then:
+  Assert execute('silent command Src') =~# 'src#cmd'
 
 
 Execute (src#init() repairs command availability after Src was deleted):

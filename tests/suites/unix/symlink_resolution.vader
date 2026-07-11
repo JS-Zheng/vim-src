@@ -1,0 +1,151 @@
+Before:
+  source plugin/src.vim
+  source tests/lib/test_helper.vim
+
+After:
+  call src#end()
+  call src#end()
+  unlet! g:src
+
+
+Execute (An explicit symlinked file target is loaded):
+  let root = getcwd() .. '/tests/.tmp/symlink-file-target'
+  let real = root .. '/real'
+  let link = root .. '/alias-file.vim'
+  let g:src_symlink_hits = []
+
+  call delete(root, 'rf')
+  call mkdir(real, 'p')
+  call writefile(["let g:src_symlink_hits = ['linked-file']"], real .. '/target.vim')
+  call system('ln -s ' .. shellescape('real/target.vim') .. ' ' .. shellescape(link))
+
+  try
+    call src#begin(root)
+    Src 'alias-file.vim'
+    call src#end()
+  finally
+    call delete(root, 'rf')
+  endtry
+
+Then:
+  AssertEqual ['linked-file'], g:src_symlink_hits
+  unlet! g:src_symlink_hits
+
+
+Execute (An explicit symlinked directory target is loaded):
+  let root = getcwd() .. '/tests/.tmp/symlink-dir-target'
+  let real = root .. '/real-dir'
+  let link = root .. '/alias-dir'
+  let g:src_symlink_hits = []
+
+  call delete(root, 'rf')
+  call mkdir(real, 'p')
+  call writefile(["let g:src_symlink_hits = ['linked-dir-child']"], real .. '/10-child.vim')
+  call system('ln -s ' .. shellescape('real-dir') .. ' ' .. shellescape(link))
+
+  try
+    call src#begin(root)
+    Src 'alias-dir'
+    call src#end()
+  finally
+    call delete(root, 'rf')
+  endtry
+
+Then:
+  AssertEqual ['linked-dir-child'], g:src_symlink_hits
+  unlet! g:src_symlink_hits
+
+
+Execute (A symlinked src#begin() base resolves nested targets physically):
+  let root = getcwd() .. '/tests/.tmp/symlink-begin-base'
+  let real = root .. '/real-root'
+  let denied = real .. '/denied'
+  let alias = root .. '/alias-root'
+  let error = ''
+
+  call delete(root, 'rf')
+  call mkdir(denied, 'p')
+  call system('ln -s ' .. shellescape('real-root') .. ' ' .. shellescape(alias))
+  call SrcTestMakeUnreadable(denied, 'dir')
+
+  try
+    try
+      call src#begin(alias)
+      call src#('denied')
+    catch
+      let error = v:exception
+    finally
+      call src#end()
+    endtry
+  finally
+    call SrcTestRestoreReadable(denied, 'dir')
+    call delete(root, 'rf')
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'
+  Assert error =~# real
+  Assert error !~# alias
+
+
+Execute (A symlinked g:src.base_dir resolves targets physically):
+  let root = getcwd() .. '/tests/.tmp/symlink-default-base'
+  let real = root .. '/real-root'
+  let denied = real .. '/denied'
+  let alias = root .. '/alias-root'
+  let error = ''
+
+  call delete(root, 'rf')
+  call mkdir(denied, 'p')
+  call system('ln -s ' .. shellescape('real-root') .. ' ' .. shellescape(alias))
+  call SrcTestMakeUnreadable(denied, 'dir')
+
+  try
+    let g:src = {'base_dir': alias}
+    try
+      call src#begin()
+      call src#('denied')
+    catch
+      let error = v:exception
+    finally
+      call src#end()
+    endtry
+  finally
+    call SrcTestRestoreReadable(denied, 'dir')
+    call delete(root, 'rf')
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'
+  Assert error =~# real
+  Assert error !~# alias
+
+
+Execute (A symlinked g:src.base_dir resolves direct targets physically):
+  let root = getcwd() .. '/tests/.tmp/symlink-direct-default-base'
+  let real = root .. '/real-root'
+  let denied = real .. '/denied'
+  let alias = root .. '/alias-root'
+  let error = ''
+
+  call delete(root, 'rf')
+  call mkdir(denied, 'p')
+  call system('ln -s ' .. shellescape('real-root') .. ' ' .. shellescape(alias))
+  call SrcTestMakeUnreadable(denied, 'dir')
+
+  try
+    let g:src = {'base_dir': alias}
+    try
+      call src#('denied')
+    catch
+      let error = v:exception
+    endtry
+  finally
+    call SrcTestRestoreReadable(denied, 'dir')
+    call delete(root, 'rf')
+  endtry
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_INVALID_TARGET .. ':'
+  Assert error =~# real
+  Assert error !~# alias

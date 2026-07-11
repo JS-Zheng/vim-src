@@ -64,16 +64,21 @@ Load files:
 
 4. Commands                                      *vim-src-commands*
 
-                                                *:Src*
-:Src
-        Source the current buffer.
+                                                *:Src* *:Src!*
+:Src[!] [{target} [, {opts}]]
+        With no target, source the current buffer. Otherwise load a String path,
+        directory, or List of String targets relative to the current base.
 
-:Src {path}
-        Load a file or directory relative to the current base directory.
+        [!] makes target availability optional. It does not suppress errors
+        raised by readable scripts and has no effect on current-buffer errors.
 
-                                                *:Src!*
-:Src! {path}
-        Same as |:Src| but ignore missing or unreadable targets.
+        {opts} is an evaluated Dictionary with these optional keys:
+
+        "optional"      Same availability policy as [!].
+        "if"            Skip the entire call when false.
+
+        Boolean options accept Number, Float, or Boolean values. Strings,
+        Lists, Dictionaries, and Funcrefs are rejected.
 
 ==============================================================================
 
@@ -81,16 +86,28 @@ Load files:
 
                                                 *src#init()*
 src#init()
-        Initialize vim-src.
+        Initialize vim-src. If an unrelated |:Src| command already exists, it
+        is preserved and a warning is reported.
+
+                                                *src#def_cmds()*
+src#def_cmds()
+        Define |:Src| explicitly, including when automatic command definition
+        is disabled. This explicitly replaces an existing |:Src| command.
 
                                                 *src#()*
-src#({path})
+src#([{path} [, {optional}]])
         Function version of |:Src|. With no arguments, source the current
-        buffer.
+        buffer. {path} may be a String or a List of targets. When {optional}
+        is non-zero, missing or unreadable targets are ignored.
+
+        {optional} must be a Number, Float, or Boolean value.
+
+        A clean normal file buffer is sourced from disk. Modified, unnamed,
+        and special buffers are sourced from their current memory contents.
 
                                                 *src#begin()*
 src#begin([{path}])
-        Push a new base directory scope.
+        Push a new base directory scope. {path} must be a String.
 
                                                 *src#end()*
 src#end()
@@ -108,24 +125,37 @@ All options are under:
 g:src.base_dir
         Explicit base directory.
 
-        Must resolve to an absolute directory.
+        Must be a String resolving to an absolute directory.
         "~" and "~/..." are accepted.
 
                                                 *g:src.base_name*
 g:src.base_name
         Name of the config directory.
 
+        Must be a String.
+
         Default: "vimrcs"
 
         When empty, vim-src resolves a base directory directly.
 
-                                                *g:src.follow_links*
-g:src.follow_links
-        Follow symlinks when loading directories.
+                                                *g:src.def_commands*
+g:src.def_commands
+        Define |:Src| automatically from |src#init()|.
+
+        Must be a Number, Float, or Boolean value.
+
+        Default: 1
 
                                                 *g:src.debug*
 g:src.debug
         Enable debug messages.
+
+        Must be a Number, Float, or Boolean value.
+
+        Default: 0
+
+Symlinks are always followed. The former g:src.follow_links option is no longer
+supported.
 
 ==============================================================================
 
@@ -190,7 +220,8 @@ Rules:
 - lexical order
 - only *.vim
 - hidden files ignored
-- symlinks optional
+- explicit symlinked files and directories are resolved and loaded
+- symlinked *.vim children are loaded; directory children remain non-recursive
 
 ==============================================================================
 
@@ -199,6 +230,9 @@ Rules:
     Src! 'file.vim'
 
 Missing files are ignored.
+
+Unreadable direct children encountered during directory loading are also
+ignored.
 
 Errors inside files are still reported.
 
@@ -229,7 +263,6 @@ Errors follow this format:
 Categories:
 
     invalid argument
-    invalid state
     invalid target
     resolution failure
     source failure
