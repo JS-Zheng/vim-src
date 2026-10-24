@@ -29,6 +29,7 @@ endif
 	@SUITE= CASE= tests/run --list-cases "$(SUITE)"
 
 help:
+	@echo "make setup"
 	@echo "make test"
 	@echo "make test SUITE=xxx"
 	@echo "make test SUITE=xxx CASE=pattern"
