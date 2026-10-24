@@ -1,0 +1,41 @@
+Before:
+  let g:startup_root = tempname()
+  call mkdir(g:startup_root . '/base/scope', 'p')
+  call writefile(["call add(g:hits, 'base')"], g:startup_root . '/base/target.vim')
+  call writefile(["call add(g:hits, 'scope')"], g:startup_root . '/base/scope/target.vim')
+  call writefile(['call NoSuchFunction()'], g:startup_root . '/base/scope/broken.vim')
+
+After:
+  call delete(g:startup_root, 'rf')
+  unlet! g:startup_root
+
+
+Execute (Scopes left open by an aborted vimrc are closed when startup ends):
+  " The rethrown failure aborts the vimrc before src#end(). A probe that runs
+  " after VimEnter must resolve from the base directory again.
+  let root = g:startup_root
+  call writefile([
+    \ 'let g:hits = []',
+    \ 'let g:src = {''base_dir'': ' . string(root . '/base') . '}',
+    \ 'call src#init()',
+    \ 'call src#begin(''scope'')',
+    \ 'Src ''broken.vim''',
+    \ 'call src#end()',
+    \ ], root . '/vimrc')
+  call writefile([
+    \ 'let g:hits = []',
+    \ 'call src#(''target.vim'')',
+    \ 'let s:warned = execute(''messages'') =~# ''left open by startup''',
+    \ 'call writefile([string(g:hits), string(s:warned)], ' . string(root . '/result') . ')',
+    \ 'qa!',
+    \ ], root . '/probe.vim')
+  call system(join(map([
+    \ v:progpath, '-Nes', '-i', 'NONE', '-n',
+    \ '--cmd', 'set rtp^=' . fnameescape(getcwd()),
+    \ '-u', root . '/vimrc',
+    \ '-c', 'autocmd VimEnter * source ' . fnameescape(root . '/probe.vim'),
+    \ ], 'shellescape(v:val)')) . ' </dev/null')
+  let result = filereadable(root . '/result') ? readfile(root . '/result') : []
+
+Then:
+  AssertEqual ["['base']", '1'], result

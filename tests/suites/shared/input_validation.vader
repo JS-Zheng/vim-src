@@ -170,3 +170,36 @@ Execute (g:src.debug rejects a Funcref):
 
 Then:
   AssertEqual 'src: ' .. g:src#ERR_INVALID_ARG .. ': g:src.debug must be a Number, Float, or Boolean', error
+
+
+Execute (src#() rejects an empty target instead of loading the base directory):
+  let g:src_default_base_hits = []
+  let error = ''
+  call src#begin(getcwd() . '/tests/fixtures/base-dir/existing')
+  try
+    call src#('')
+  catch
+    let error = v:exception
+  finally
+    call src#end()
+  endtry
+
+Then:
+  AssertEqual 'src: ' .. g:src#ERR_INVALID_ARG .. ': target must not be empty', error
+  AssertEqual [], g:src_default_base_hits
+  unlet! g:src_default_base_hits
+
+
+Execute (Src! skips an empty target such as an unset variable):
+  let g:src_default_base_hits = []
+  call src#begin(getcwd() . '/tests/fixtures/base-dir/existing')
+  try
+    Src! $SRC_TEST_UNSET_VARIABLE
+    call src#(['', 'default.vim'], 1)
+  finally
+    call src#end()
+  endtry
+
+Then:
+  AssertEqual ['base-dir-override'], g:src_default_base_hits
+  unlet! g:src_default_base_hits

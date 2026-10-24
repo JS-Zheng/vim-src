@@ -50,12 +50,15 @@ let s:BOOL_SCALAR_TYPES = [v:t_number, v:t_float, type(v:true)]
 " cache platform check results
 let s:IS_WINDOWS = has('win32') || has('win64')
 
+" replacement text of the :Src command defined by src#def_cmds()
+let s:SRC_CMD_DEFINITION = "call src#cmd('<bang>' ==# '!', <args>)"
 
-" non-zero once :Src command has been defined
-let s:commands_defined = 0
 
 " non-zero once a foreign :Src collision has been reported
 let s:command_collision_reported = 0
+
+" non-zero once the VimEnter cleanup of startup scopes has been registered
+let s:startup_cleanup_registered = 0
 
 " stack of directory contexts for relative path resolution
 let s:ctx_stack = []
@@ -90,7 +93,7 @@ function! src#init() abort
     endif
 
     if exists(':Src') == 2
-        if s:commands_defined
+        if s:owns_src_command()
             return
         endif
 
@@ -114,8 +117,7 @@ endfunction
 " disables automatic bootstrap command definition.
 "
 function! src#def_cmds() abort
-    command! -nargs=* -bang Src call src#cmd('<bang>' ==# '!', <args>)
-    let s:commands_defined = 1
+    execute 'command! -nargs=* -bang Src ' .. s:SRC_CMD_DEFINITION
     let s:command_collision_reported = 0
 endfunction
 
@@ -225,8 +227,7 @@ endfunction
 "
 function! src#begin(...) abort
     call s:init_cfg()
-    if s:get_def_commands_cfg()
-        \ && (!s:commands_defined || exists(':Src') != 2)
+    if s:get_def_commands_cfg() && !s:owns_src_command()
         call src#init()
     endif
 
@@ -247,6 +248,28 @@ endfunction
 function! src#end() abort
     call s:init_cfg()
     call s:end()
+endfunction
+
+
+" Check whether :Src is the command defined by src#def_cmds().
+"
+" Notes:
+" - Ownership is decided by the exact definition rather than script state,
+"   so re-sourcing this script does not mistake its own :Src for a foreign
+"   command, while foreign commands that merely mention src#cmd stay foreign.
+"
+function! s:owns_src_command() abort
+    if exists(':Src') != 2
+        return 0
+    endif
+
+    let definition = s:SRC_CMD_DEFINITION
+    for line in split(execute('command Src'), "\n")
+        if line =~# '^\S*\s\+Src\s'
+            return strpart(line, len(line) - len(definition)) ==# definition
+        endif
+    endfor
+    return 0
 endfunction
 
 
@@ -330,7 +353,44 @@ endfunction
 " Core logic for base directory scope activation.
 function! s:begin_with_base(base) abort
     call s:debug('begin: ' .. a:base)
+    call s:register_startup_cleanup()
     call s:push_ctx(a:base)
+endfunction
+
+
+" Close scopes still open when startup ends.
+"
+" Notes:
+" - A failure rethrown from a vimrc aborts it before its src#end() calls,
+"   which would otherwise leave every later :Src resolving inside a stale
+"   scope for the whole session.
+"
+function! s:register_startup_cleanup() abort
+    if v:vim_did_enter || s:startup_cleanup_registered
+        return
+    endif
+
+    augroup src_startup_cleanup
+        autocmd!
+        autocmd VimEnter * call s:close_startup_scopes()
+    augroup END
+    let s:startup_cleanup_registered = 1
+endfunction
+
+
+" Drop scopes left open by startup and report how many were closed.
+function! s:close_startup_scopes() abort
+    autocmd! src_startup_cleanup
+    if empty(s:ctx_stack)
+        return
+    endif
+
+    let closed = len(s:ctx_stack)
+    let s:ctx_stack = []
+    let s:ctx_floor_stack = []
+    echohl WarningMsg
+    echomsg '[vim-src] closed ' .. closed .. ' src#begin() scope(s) left open by startup'
+    echohl None
 endfunction
 
 
@@ -341,11 +401,21 @@ endfunction
 " - optional (int): Non-zero to skip if invalid.
 "
 " Throws:
+" - src: invalid argument: target must not be empty
 " - src: invalid target: source target <PATH> not found
 " - src: invalid target: file <PATH> is unreadable
 " - src: invalid target: directory <PATH> is unreadable
 "
 function! s:source(path, optional) abort
+    " An empty target would otherwise resolve to the base directory itself
+    " and load all of it, e.g. from an unset variable in `Src! $LOCAL`.
+    if empty(a:path)
+        if a:optional
+            return
+        endif
+        call s:throw(g:src#ERR_INVALID_ARG, 'target must not be empty')
+    endif
+
     let target = s:resolve_target_info(s:target_entry_path(a:path))
 
     call s:debug('source: ' .. target.path)

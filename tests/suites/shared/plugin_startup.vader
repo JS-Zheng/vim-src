@@ -50,6 +50,19 @@ Then:
   Assert type(g:src) == v:t_dict
 
 
+Execute (src#init() keeps its own Src command after vim-src is re-sourced):
+  call src#init()
+  source autoload/src.vim
+  let messages = ''
+  redir => messages
+  silent call src#init()
+  redir END
+
+Then:
+  Assert exists(':Src') == 2
+  Assert messages !~# 'command collision', messages
+
+
 Execute (src#init() preserves a foreign Src command and reports the collision):
   let g:src_foreign_command_hit = 0
   command! Src let g:src_foreign_command_hit = 1

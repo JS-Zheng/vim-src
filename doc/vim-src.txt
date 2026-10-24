@@ -70,7 +70,12 @@ Load files:
         directory, or List of String targets relative to the current base.
 
         [!] makes target availability optional. It does not suppress errors
-        raised by readable scripts and has no effect on current-buffer errors.
+        raised by readable scripts or base directory resolution failures, and
+        has no effect on current-buffer errors.
+
+        An empty target is rejected, or skipped with [!], so an unset
+        variable such as `Src! $LOCAL_VIMRC` does not load the whole base
+        directory.
 
         {opts} is an evaluated Dictionary with these optional keys:
 
@@ -81,8 +86,9 @@ Load files:
         Lists, Dictionaries, and Funcrefs are rejected.
 
         Arguments are evaluated in the script context of vim-src itself, so
-        script-local variables (s:var) are not visible, and a trailing "|"
-        or comment is not supported. Use |src#()| in those cases: >
+        script-local variables (s:var) and variables of a Vim9 script or
+        :def function are not visible, and a trailing "|" or comment is not
+        supported. Use |src#()| in those cases: >
 
             call src#(s:local_file, 1)
 <
@@ -110,7 +116,8 @@ src#([{path} [, {optional}]])
         {optional} must be a Number, Float, or Boolean value.
 
         A clean normal file buffer is sourced from disk. Modified, unnamed,
-        and special buffers are sourced from their current memory contents.
+        and special buffers are sourced from their current memory contents
+        through a temporary file, so |<sfile>| refers to that file there.
 
         Relative targets inside a file buffer resolve against the buffer's
         directory, except for |$MYVIMRC|, which keeps the same resolution
@@ -123,6 +130,10 @@ src#begin([{path}])
                                                 *src#end()*
 src#end()
         Pop one scope.
+
+        Scopes that are still open when startup ends, for example because an
+        error aborted the vimrc before its src#end(), are closed at |VimEnter|
+        with a warning.
 
 ==============================================================================
 
@@ -257,6 +268,15 @@ Errors inside files are still reported.
 ==============================================================================
 
 10. Scope                                        *vim-src-scope*
+
+Relative targets resolve against the innermost of:
+
+1. the latest open |src#begin()| scope of the current file (or of the
+   command line, when used interactively)
+2. the directory of the file being loaded by vim-src
+3. the default base directory (|vim-src-base-dir|)
+
+So inside a loaded file, `Src 'x.vim'` loads a sibling of that file.
 
 Example:
 
