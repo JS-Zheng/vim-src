@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-24
+
 ### Removed
 
 - **Breaking:** the `follow_links` option is gone from `g:src`, from `:Src`
@@ -46,5 +48,6 @@ All notable changes to this project are documented here. The format follows
 
 - Initial release.
 
-[Unreleased]: https://github.com/JS-Zheng/vim-src/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/JS-Zheng/vim-src/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/JS-Zheng/vim-src/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/JS-Zheng/vim-src/releases/tag/v0.1.0
