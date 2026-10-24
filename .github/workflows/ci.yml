@@ -38,6 +38,12 @@ jobs:
 
   windows-test:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        editor:
+          - vim
+          - nvim
 
     steps:
       - name: Check out repository
@@ -50,13 +56,14 @@ jobs:
           ref: 429b669e6158be3a9fc110799607c232e6ed8e29
           path: .deps/vader.vim
 
-      - name: Install Neovim
+      - name: Install editor
+        id: editor
         uses: rhysd/action-setup-vim@febef33995d6649302e9d88dda81e071b68f16a7 # v1.6.1
         with:
           version: stable
-          neovim: true
+          neovim: ${{ matrix.editor == 'nvim' }}
 
       - name: Run Windows validation suite
         run: python tests/run.py
         env:
-          VIM_BIN: nvim
+          VIM_BIN: ${{ steps.editor.outputs.executable }}

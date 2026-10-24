@@ -234,6 +234,13 @@ Rules:
 - explicit symlinked files and directories are resolved and loaded
 - symlinked *.vim children are loaded; directory children remain non-recursive
 
+Note: on MS-Windows, |getftype()| reports a symbolic link to a directory as a
+plain directory, so an explicit directory target that is such a link keeps its
+link path as the loading context instead of the target path. Files inside it
+resolve the same either way; only relative paths that leave it with ".." can
+differ. Base directories from |src#begin()| and |g:src.base_dir| are always
+resolved to their target path.
+
 ==============================================================================
 
 9. Optional Files                                *vim-src-optional*
