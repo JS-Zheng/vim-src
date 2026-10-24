@@ -96,3 +96,28 @@ Execute (Unmatched src#end cannot remove a directory loading context):
 
 Then:
   AssertEqual ['dir-over-pop-safe'], g:src_stack_cleanup_hits
+
+
+Execute (Re-sourcing vim-src mid-source fails with a stable src error):
+  " Running functions cannot be redefined, but the reset script state must
+  " not mask that failure with a stack cleanup error.
+  let root = tempname()
+  call mkdir(root, 'p')
+  call writefile([
+    \ 'source ' . fnameescape(getcwd() . '/autoload/src.vim'),
+    \ ], root . '/reload.vim')
+  let error = ''
+  try
+    call src#(root . '/reload.vim')
+  catch
+    let error = v:exception
+  finally
+    call delete(root, 'rf')
+  endtry
+  call src#begin(getcwd() . '/tests/fixtures/stack-cleanup/outer')
+  call src#('good.vim')
+  call src#end()
+
+Then:
+  Assert error =~# '^src: ' .. g:src#ERR_SOURCE .. ':', error
+  AssertEqual ['outer'], g:src_stack_cleanup_hits

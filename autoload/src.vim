@@ -427,6 +427,7 @@ function! s:source_script(path, context_dir, failure_context) abort
     if !empty(a:context_dir) && !s:ctx_matches(a:context_dir)
         call s:push_ctx(a:context_dir)
     endif
+    let floor_index = len(s:ctx_floor_stack)
     call add(s:ctx_floor_stack, len(s:ctx_stack))
 
     try
@@ -435,7 +436,11 @@ function! s:source_script(path, context_dir, failure_context) abort
         call s:error(a:failure_context, v:exception, v:throwpoint)
         call s:throw(g:src#ERR_SOURCE, a:failure_context)
     finally
-        call remove(s:ctx_floor_stack, -1)
+        " Re-sourcing this script while it runs resets both stacks, so only
+        " trim entries that still exist.
+        if len(s:ctx_floor_stack) > floor_index
+            call remove(s:ctx_floor_stack, floor_index, -1)
+        endif
         call s:restore_stack_depth(stack_depth)
     endtry
 endfunction

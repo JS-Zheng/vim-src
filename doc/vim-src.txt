@@ -80,6 +80,13 @@ Load files:
         Boolean options accept Number, Float, or Boolean values. Strings,
         Lists, Dictionaries, and Funcrefs are rejected.
 
+        Arguments are evaluated in the script context of vim-src itself, so
+        script-local variables (s:var) are not visible, and a trailing "|"
+        or comment is not supported. Use |src#()| in those cases: >
+
+            call src#(s:local_file, 1)
+<
+
 ==============================================================================
 
 5. Functions                                     *vim-src-functions*
@@ -266,6 +273,11 @@ Categories:
     invalid target
     resolution failure
     source failure
+
+Unlike a plain |:source|, the first error inside a sourced file stops that
+file, reports the file, original error, and throwpoint, and is rethrown as a
+"source failure". Each enclosing sourced file reports its own context as the
+error propagates.
 
 ==============================================================================
 
