@@ -70,3 +70,32 @@ Execute (src#init workflow supports src#begin() relative to the current loading 
 
 Then:
   AssertEqual ['asyncrun', 'coc'], g:init_workflow_hits
+
+
+Execute (Src reloads a clean $MYVIMRC buffer with the startup resolution context):
+  let $HOME = getcwd() . '/tests/fixtures/init-workflow/home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = $HOME . '/.vimrc'
+  let g:init_workflow_hits = []
+  call src#init()
+  execute 'edit' fnameescape($MYVIMRC)
+  Src
+  bwipeout!
+
+Then:
+  AssertEqual ['general'], g:init_workflow_hits
+
+
+Execute (Src reloads a modified $MYVIMRC buffer with the startup resolution context):
+  let $HOME = getcwd() . '/tests/fixtures/init-workflow/home'
+  let $XDG_CONFIG_HOME = ''
+  let $MYVIMRC = $HOME . '/.vimrc'
+  let g:init_workflow_hits = []
+  call src#init()
+  execute 'edit' fnameescape($MYVIMRC)
+  call append('$', "Src 'general.vim'")
+  Src
+  bwipeout!
+
+Then:
+  AssertEqual ['general', 'general'], g:init_workflow_hits

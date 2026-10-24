@@ -156,6 +156,28 @@ Then:
   AssertEqual ['buffer-func-modified'], g:src_test_loaded
 
 
+Execute (Src without arguments sources a modified Lua buffer as Lua):
+  " Neovim chooses the :source interpreter by extension; older editors cannot
+  " source Lua at all, so they keep the expected value.
+  let g:src_test_loaded = ['lua-modified']
+  if has('nvim-0.5')
+    let g:src_test_loaded = []
+    let path = tempname() . '.lua'
+    call writefile(['vim.g.src_test_loaded = { "lua-disk" }'], path)
+    execute 'edit' fnameescape(path)
+    call setline(1, 'vim.g.src_test_loaded = { "lua-modified" }')
+    try
+      Src
+    finally
+      bwipe!
+      call delete(path)
+    endtry
+  endif
+
+Then:
+  AssertEqual ['lua-modified'], g:src_test_loaded
+
+
 Execute (Src! without arguments uses modified named buffer contents):
   let g:src_test_loaded = []
   execute 'edit' fnameescape(getcwd() . '/tests/fixtures/stack-cleanup/current-buffer-broken.vim')

@@ -112,6 +112,10 @@ src#([{path} [, {optional}]])
         A clean normal file buffer is sourced from disk. Modified, unnamed,
         and special buffers are sourced from their current memory contents.
 
+        Relative targets inside a file buffer resolve against the buffer's
+        directory, except for |$MYVIMRC|, which keeps the same resolution
+        context as at startup so it can be reloaded in place.
+
                                                 *src#begin()*
 src#begin([{path}])
         Push a new base directory scope. {path} must be a String.

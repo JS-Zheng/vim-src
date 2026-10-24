@@ -266,7 +266,7 @@ function! s:source_buffer() abort
         let path = expand('%:p')
         if &buftype ==# '' && bufname('%') !=# '' && filereadable(path) && !&modified
             " Source from disk if buffer is unchanged;
-            call s:source_script(path, fnamemodify(path, ':p:h'), context)
+            call s:source_script(path, s:buffer_context_dir(), context)
         else
             " otherwise, source from memory via temp file.
             call s:source_buffer_contents(s:buffer_context_dir(), context)
@@ -447,8 +447,14 @@ endfunction
 
 
 " Write buffer contents to a temporary file and source it.
+"
+" Notes:
+" - Neovim picks the :source interpreter by extension, so Lua buffers keep a
+"   .lua temp file.
+"
 function! s:source_buffer_contents(context_dir, failure_context) abort
-    let tmp = tempname() .. '.vim'
+    let is_lua = expand('%:e') ==? 'lua' || &filetype ==# 'lua'
+    let tmp = tempname() .. (is_lua ? '.lua' : '.vim')
     call writefile(getline(1, '$'), tmp)
     try
         call s:source_script(tmp, a:context_dir, a:failure_context)
@@ -459,13 +465,30 @@ endfunction
 
 
 " Determine the directory context for the current buffer.
+"
+" Notes:
+" - $MYVIMRC is loaded by the editor rather than by vim-src, so reloading it
+"   keeps the startup resolution context instead of pushing its directory.
+"
 function! s:buffer_context_dir() abort
     let path = expand('%:p')
-    if empty(path)
+    if empty(path) || s:is_myvimrc(path)
         return ''
     endif
 
     return fnamemodify(path, ':p:h')
+endfunction
+
+
+" Check whether a path refers to the startup vimrc ($MYVIMRC).
+function! s:is_myvimrc(path) abort
+    if empty($MYVIMRC)
+        return 0
+    endif
+
+    let vimrc = resolve(fnamemodify($MYVIMRC, ':p'))
+    let path = resolve(fnamemodify(a:path, ':p'))
+    return s:IS_WINDOWS ? vimrc ==? path : vimrc ==# path
 endfunction
 
 
