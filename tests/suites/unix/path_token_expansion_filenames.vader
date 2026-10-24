@@ -10,13 +10,27 @@ After:
 
 Execute (Quoted <cword> is treated as a literal filename, not the current-word token):
   let g:path_token_hits = []
-  let root = getcwd() . '/tests/fixtures/path-token-expansion'
+  " Created at runtime: the filename is invalid on Windows checkouts.
+  let root = tempname()
+  call mkdir(root, 'p')
+  call writefile([
+    \ 'let g:path_token_hits = get(g:, ''path_token_hits'', [])',
+    \ 'call add(g:path_token_hits, ''literal-cword'')',
+    \ ], root . '/<cword>')
+  call writefile([
+    \ 'let g:path_token_hits = get(g:, ''path_token_hits'', [])',
+    \ 'call add(g:path_token_hits, ''wordtarget'')',
+    \ ], root . '/wordtarget')
   enew
   call setline(1, ['wordtarget'])
   normal! gg0
   call src#begin(root)
-  call src#('<cword>')
-  call src#end()
+  try
+    call src#('<cword>')
+  finally
+    call src#end()
+    call delete(root, 'rf')
+  endtry
 
 Then:
   AssertEqual ['literal-cword'], g:path_token_hits

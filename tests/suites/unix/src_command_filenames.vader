@@ -8,9 +8,20 @@ After:
 
 Execute (Src accepts a double-quoted path containing an escaped double quote):
   let g:src_test_loaded = []
-  call src#begin(getcwd() . '/tests/fixtures/src-command')
-  execute 'Src "dquote\"file.vim"'
-  call src#end()
+  " Created at runtime: the filename is invalid on Windows checkouts.
+  let root = tempname()
+  call mkdir(root, 'p')
+  call writefile([
+    \ 'let g:src_test_loaded = get(g:, ''src_test_loaded'', [])',
+    \ 'call add(g:src_test_loaded, "double-quote")',
+    \ ], root . '/dquote"file.vim')
+  call src#begin(root)
+  try
+    execute 'Src "dquote\"file.vim"'
+  finally
+    call src#end()
+    call delete(root, 'rf')
+  endtry
 
 Then:
   AssertEqual ['double-quote'], g:src_test_loaded
