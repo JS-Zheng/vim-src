@@ -38,11 +38,8 @@ let s:DEFAULT_DEF_COMMANDS = 1
 " whether debug logging is enabled
 let s:DEFAULT_DEBUG = 0
 
-" supported command-layer option keys
+" supported command-layer option keys; all of them are booleans
 let s:CMD_OPTION_KEYS = ['optional', 'if']
-
-" option keys normalized as booleans in command-layer parsing
-let s:CMD_BOOL_OPTION_KEYS = ['optional', 'if']
 
 " numeric/Boolean types accepted by public boolean options
 let s:BOOL_SCALAR_TYPES = [v:t_number, v:t_float, type(v:true)]
@@ -160,11 +157,7 @@ function! src#cmd(optional, ...) abort
         return
     endif
 
-    if type(target) == v:t_list
-        call s:source_list(target, optional)
-    else
-        call s:source(target, optional)
-    endif
+    call s:source_targets(target, optional)
 endfunction
 
 
@@ -193,19 +186,12 @@ function! src#(...) abort
 
     if a:0 == 0
         " Default to current buffer if no target is provided.
-        return s:source_buffer()
+        call s:source_buffer()
+        return
     endif
 
-    let target = a:1
-    call s:validate_target(target)
-    let optional = s:normalize_bool(get(a:, 2, 0), 'optional')
-
-    " Branch based on target type for fixed-arity core calls.
-    if type(target) == v:t_list
-        return s:source_list(target, optional)
-    endif
-
-    return s:source(target, optional)
+    call s:validate_target(a:1)
+    call s:source_targets(a:1, s:normalize_bool(get(a:, 2, 0), 'optional'))
 endfunction
 
 
@@ -231,16 +217,16 @@ function! src#begin(...) abort
         call src#init()
     endif
 
-    if a:0 == 0
-        return s:begin_default()
+    if a:0 > 1
+        call s:throw(g:src#ERR_INVALID_ARG, 'unexpected argument count')
     endif
 
-    if a:0 == 1
-        call s:require_string(a:1, 'path')
-        return s:begin_explicit(a:1)
-    endif
-
-    call s:throw(g:src#ERR_INVALID_ARG, 'unexpected argument count')
+    let base = a:0 == 0
+        \ ? s:resolve_default_dir()
+        \ : s:resolve_explicit_base_dir(s:require_string(a:1, 'path'))
+    call s:debug('begin: ' .. base)
+    call s:register_startup_cleanup()
+    call s:push_ctx(base)
 endfunction
 
 
@@ -304,34 +290,16 @@ function! s:source_buffer() abort
 endfunction
 
 
-" Entry point for sourcing a list of logical targets.
+" Source a validated target: one logical path or a List of them, in order.
 "
 " Args:
-" - targets (str[]): List of targets to be sourced.
-" - optional (int): Non-zero to skip if unreadable.
+" - target (str|str[]): Logical target(s) to resolve and source.
+" - optional (int): Non-zero to skip missing or unreadable targets.
 "
-function! s:source_list(targets, optional) abort
-    for target in a:targets
-        call s:source(target, a:optional)
+function! s:source_targets(target, optional) abort
+    for path in type(a:target) == v:t_list ? a:target : [a:target]
+        call s:source(path, a:optional)
     endfor
-endfunction
-
-
-" Push default base directory scope.
-function! s:begin_default() abort
-    let base = s:resolve_default_dir()
-    call s:begin_with_base(base)
-endfunction
-
-
-" Push explicit path scope.
-"
-" Args:
-" - path (str): Base directory path.
-"
-function! s:begin_explicit(path) abort
-    let base = s:resolve_explicit_base_dir(a:path)
-    call s:begin_with_base(base)
 endfunction
 
 
@@ -347,14 +315,6 @@ function! s:end() abort
 
     call s:debug('end: ' .. s:ctx_stack[-1])
     call remove(s:ctx_stack, -1)
-endfunction
-
-
-" Core logic for base directory scope activation.
-function! s:begin_with_base(base) abort
-    call s:debug('begin: ' .. a:base)
-    call s:register_startup_cleanup()
-    call s:push_ctx(a:base)
 endfunction
 
 
@@ -501,7 +461,7 @@ function! s:source_script(path, context_dir, failure_context) abort
     call add(s:ctx_floor_stack, len(s:ctx_stack))
 
     try
-        execute 'source ' .. s:escape_source_path(a:path)
+        execute 'source ' .. fnameescape(a:path)
     catch
         call s:error(a:failure_context, v:exception, v:throwpoint)
         call s:throw(g:src#ERR_SOURCE, a:failure_context)
@@ -580,22 +540,9 @@ endfunction
 
 " Restore the context stack to a specific depth.
 function! s:restore_stack_depth(depth) abort
-    while len(s:ctx_stack) > a:depth
-        call remove(s:ctx_stack, -1)
-    endwhile
-endfunction
-
-
-" Escape a file path for use with the :source command.
-"
-" Args:
-" - path (str): Raw file path.
-"
-" Returns:
-"   str: Escaped path.
-"
-function! s:escape_source_path(path) abort
-    return fnameescape(a:path)
+    if len(s:ctx_stack) > a:depth
+        call remove(s:ctx_stack, a:depth, -1)
+    endif
 endfunction
 
 
@@ -641,14 +588,7 @@ endfunction
 "   str: Validated absolute path.
 "
 function! s:resolve_explicit_base_dir(path) abort
-    let expanded = s:expand_tilde(a:path)
-    if s:is_abs_path(expanded)
-        return s:require_resolution_base(expanded)
-    endif
-
-    return s:require_resolution_base(
-        \ s:join_path(s:current_resolution_base(), expanded)
-        \ )
+    return s:require_resolution_base(s:target_entry_path(a:path))
 endfunction
 
 
@@ -673,19 +613,16 @@ function! s:dir_vim_children(path) abort
         call s:throw(g:src#ERR_INVALID_TARGET, 'directory ' .. a:path .. ' is unreadable')
     endif
 
+    " Visible *.vim names only; sorting the names gives the byte-wise lexical
+    " load order.
     let children = []
-    for name in names
-        if name =~# '^\.'
-            continue
-        endif
-        let full = s:join_path(a:path, name)
-        let target = s:resolve_target_info(full)
-        if target.kind ==# 'file' && name =~# '\.vim$'
+    for name in sort(filter(copy(names), 'v:val =~# ''^[^.].*\.vim$'''))
+        let target = s:resolve_target_info(s:join_path(a:path, name))
+        if target.kind ==# 'file'
             call add(children, target)
         endif
     endfor
-
-    return sort(children, function('s:compare_target_basenames'))
+    return children
 endfunction
 
 
@@ -709,14 +646,6 @@ function! s:read_dir_names(path) abort
     let pattern = substitute(pattern, '[/\\]\+$', '', '') .. '/*'
 
     return map(glob(pattern, 1, 1, 1), 'fnamemodify(v:val, ":t")')
-endfunction
-
-
-" Compare two classified targets by their directory-entry basenames.
-function! s:compare_target_basenames(a, b) abort
-    let ba = fnamemodify(a:a.entry_path, ':t')
-    let bb = fnamemodify(a:b.entry_path, ':t')
-    return ba <# bb ? -1 : ba ># bb ? 1 : 0
 endfunction
 
 
@@ -756,30 +685,17 @@ endfunction
 " - path (str): Concrete absolute or relative path to inspect.
 "
 " Returns:
-"   dict: Classified target info with resolved path and final filetype.
+"   dict: {kind: 'file'|'dir'|'missing', entry_path: as given, path: the
+"   normalized path with a symlink resolved to its target}
 "
 function! s:resolve_target_info(path) abort
-    let info = {
-          \ 'kind': 'missing',
-          \ 'entry_path': a:path,
-          \ 'path': a:path,
-          \ 'ftype': '',
-          \ }
-    let ftype = getftype(a:path)
-
-    if ftype ==# 'link'
-        let info.path = s:normalize_path(resolve(a:path))
-        let ftype = getftype(info.path)
-    elseif ftype ==# 'file' || ftype ==# 'dir'
-        let info.path = s:normalize_path(a:path)
+    let path = getftype(a:path) ==# 'link' ? resolve(a:path) : a:path
+    let ftype = getftype(path)
+    if ftype !=# 'file' && ftype !=# 'dir'
+        return {'kind': 'missing', 'entry_path': a:path, 'path': a:path}
     endif
 
-    let info.ftype = ftype
-    if ftype ==# 'file' || ftype ==# 'dir'
-        let info.kind = ftype
-    endif
-
-    return info
+    return {'kind': ftype, 'entry_path': a:path, 'path': s:normalize_path(path)}
 endfunction
 
 
@@ -839,22 +755,14 @@ function! s:resolve_default_dir() abort
         endif
     else
         let base_name = s:get_base_name_cfg()
-        if empty(base_name)
-            let base_dir = s:resolve_base_dir_without_name()
-            if empty(base_dir)
-                call s:throw(
-                    \ g:src#ERR_RESOLUTION,
-                    \ 'base directory not found for canonical config root'
-                    \ )
-            endif
-        else
-            let base_dir = s:resolve_base_dir_with_name(base_name)
-            if empty(base_dir)
-                call s:throw(
-                    \ g:src#ERR_RESOLUTION,
-                    \ 'base directory not found for base_name: ' .. base_name
-                    \ )
-            endif
+        let base_dir = s:find_base_dir(base_name)
+        if empty(base_dir)
+            call s:throw(
+                \ g:src#ERR_RESOLUTION,
+                \ empty(base_name)
+                \     ? 'base directory not found for canonical config root'
+                \     : 'base directory not found for base_name: ' .. base_name
+                \ )
         endif
     endif
 
@@ -882,153 +790,64 @@ function! s:xdg_config_home() abort
 endfunction
 
 
-" Return the path when it exists as a directory; otherwise return an empty
-" string.
-function! s:dir_if_exists(path) abort
-    if isdirectory(a:path)
-        return a:path
-    endif
-
-    return ''
-endfunction
-
-
-" Resolve a named base directory under common config roots.
+" Return the config roots searched for a base directory, in priority order.
 "
 " Notes:
-"   This search order intentionally differs from
-"   s:resolve_base_dir_without_name().
+"   The order depends on whether a base name is configured.
 "
-"   When a base name is provided (default: 'vimrcs'), users commonly place
-"   the main init file and the named config directory side-by-side.
-"   Therefore dir($MYVIMRC) has the highest priority here.
+"   With a base name (default: 'vimrcs'), users commonly place the main init
+"   file and the named config directory side by side, so dir($MYVIMRC) comes
+"   first.
+"
+"   Without one, canonical personal config roots such as stdpath('config'),
+"   ~/.vim, or ~/vimfiles come first. dir($MYVIMRC) is demoted because a
+"   common setup is $MYVIMRC = ~/.vimrc, where it would resolve to $HOME,
+"   which is usually not the intended base directory.
 "
 " Args:
-" - base_name (str): Directory name to search for under candidate roots.
+" - named (int): Non-zero when a base name is configured.
 "
 " Returns:
-"   str: Resolved directory path, or an empty string when not found.
+"   str[]: Candidate roots; unavailable roots are empty strings.
 "
-function! s:resolve_base_dir_with_name(base_name) abort
-    if !empty($MYVIMRC)
-        let dir = s:dir_if_exists(
-            \ fnamemodify($MYVIMRC, ':p:h') .. '/' .. a:base_name
-            \ )
-        if !empty(dir)
-            return dir
-        endif
-    endif
-
-    if has('nvim')
-        let dir = s:dir_if_exists(stdpath('config') .. '/' .. a:base_name)
-        if !empty(dir)
-            return dir
-        endif
-    endif
-
+function! s:config_roots(named) abort
     let home = s:home_dir()
+    let vimrc_dir = empty($MYVIMRC) ? '' : fnamemodify($MYVIMRC, ':p:h')
 
+    let roots = a:named ? [vimrc_dir] : []
+    if has('nvim')
+        call add(roots, stdpath('config'))
+    endif
     if s:IS_WINDOWS
-        let dir = s:dir_if_exists(home .. '/vimfiles/' .. a:base_name)
-        if !empty(dir)
-            return dir
-        endif
+        call add(roots, home .. '/vimfiles')
     endif
-
-    let dir = s:dir_if_exists(home .. '/.vim/' .. a:base_name)
-    if !empty(dir)
-        return dir
+    call extend(roots, [home .. '/.vim', s:xdg_config_home() .. '/vim'])
+    if !a:named
+        call add(roots, vimrc_dir)
     endif
-
-    let dir = s:dir_if_exists(s:xdg_config_home() .. '/vim/' .. a:base_name)
-    if !empty(dir)
-        return dir
-    endif
-
-    if !empty($VIM)
-        let dir = s:dir_if_exists($VIM .. '/vimfiles/' .. a:base_name)
-        if !empty(dir)
-            return dir
-        endif
-    endif
-
-    if !empty($VIMRUNTIME)
-        let dir = s:dir_if_exists($VIMRUNTIME .. '/' .. a:base_name)
-        if !empty(dir)
-            return dir
-        endif
-    endif
-
-    return ''
+    return roots + [empty($VIM) ? '' : $VIM .. '/vimfiles', $VIMRUNTIME]
 endfunction
 
 
-" Resolve the default base directory without a named subdirectory.
+" Find the first existing base directory under the config roots.
 "
-" Notes:
-"   This search order intentionally differs from
-"   s:resolve_base_dir_with_name().
-"
-"   When no base name is configured, vim-src should prefer canonical
-"   personal config roots such as stdpath('config'), ~/.vim, or ~/vimfiles.
-"   It should not prioritize dir($MYVIMRC), because a common setup is:
-"
-"   $MYVIMRC = ~/.vimrc
-"
-"   In that case, dir($MYVIMRC) would resolve to $HOME, which is usually not
-"   the intended base directory for modular Vim config files.
+" Args:
+" - base_name (str): Named subdirectory to look for, or empty to use the
+"   roots themselves.
 "
 " Returns:
 "   str: Resolved directory path, or an empty string when not found.
 "
-function! s:resolve_base_dir_without_name() abort
-    if has('nvim')
-        let dir = s:dir_if_exists(stdpath('config'))
-        if !empty(dir)
+function! s:find_base_dir(base_name) abort
+    for root in s:config_roots(!empty(a:base_name))
+        if empty(root)
+            continue
+        endif
+        let dir = empty(a:base_name) ? root : root .. '/' .. a:base_name
+        if isdirectory(dir)
             return dir
         endif
-    endif
-
-    let home = s:home_dir()
-
-    if s:IS_WINDOWS
-        let dir = s:dir_if_exists(home .. '/vimfiles')
-        if !empty(dir)
-            return dir
-        endif
-    endif
-
-    let dir = s:dir_if_exists(home .. '/.vim')
-    if !empty(dir)
-        return dir
-    endif
-
-    let dir = s:dir_if_exists(s:xdg_config_home() .. '/vim')
-    if !empty(dir)
-        return dir
-    endif
-
-    if !empty($MYVIMRC)
-        let dir = s:dir_if_exists(fnamemodify($MYVIMRC, ':p:h'))
-        if !empty(dir)
-            return dir
-        endif
-    endif
-
-    if !empty($VIM)
-        let dir = s:dir_if_exists($VIM .. '/vimfiles')
-        if !empty(dir)
-            return dir
-        endif
-    endif
-
-    if !empty($VIMRUNTIME)
-        let dir = s:dir_if_exists($VIMRUNTIME)
-        if !empty(dir)
-            return dir
-        endif
-    endif
-
+    endfor
     return ''
 endfunction
 
@@ -1268,7 +1087,7 @@ endfunction
 "  Option Normalization {{{
 " ==============================================================================
 
-" Ensure command options are valid and typed correctly.
+" Validate command options and normalize their values to 0/1.
 "
 " Args:
 " - opts (dict): Command options.
@@ -1285,38 +1104,17 @@ function! s:normalize_cmd_opts(opts) abort
         call s:throw(g:src#ERR_INVALID_ARG, 'opts must be a Dictionary')
     endif
 
-    return s:normalize_opts(a:opts, s:CMD_OPTION_KEYS, s:CMD_BOOL_OPTION_KEYS)
-endfunction
-
-
-" Normalize a typed options dictionary against an explicit schema.
-"
-" Args:
-" - opts (dict): Raw option dictionary.
-" - allowed_keys (str[]): Supported option keys.
-" - bool_keys (str[]): Keys coerced to 0/1 boolean values.
-"
-" Returns:
-"   dict: Normalized option dictionary.
-"
-" Throws:
-" - src: invalid argument: unsupported option: ...
-"
-function! s:normalize_opts(opts, allowed_keys, bool_keys) abort
-    let opts = {}
+    " Report unsupported keys before value errors, independent of key order.
     for key in keys(a:opts)
-        if index(a:allowed_keys, key) < 0
+        if index(s:CMD_OPTION_KEYS, key) < 0
             call s:throw(g:src#ERR_INVALID_ARG, 'unsupported option: ' .. key)
         endif
-        let opts[key] = a:opts[key]
     endfor
 
-    for key in a:bool_keys
-        if has_key(opts, key)
-            let opts[key] = s:normalize_bool(opts[key], key)
-        endif
+    let opts = {}
+    for [key, value] in items(a:opts)
+        let opts[key] = s:normalize_bool(value, key)
     endfor
-
     return opts
 endfunction
 
