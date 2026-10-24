@@ -488,7 +488,12 @@ function! s:is_myvimrc(path) abort
 
     let vimrc = resolve(fnamemodify($MYVIMRC, ':p'))
     let path = resolve(fnamemodify(a:path, ':p'))
-    return s:IS_WINDOWS ? vimrc ==? path : vimrc ==# path
+    if !s:IS_WINDOWS
+        return vimrc ==# path
+    endif
+
+    " Vim on MS-Windows keeps mixed separators, and file names ignore case.
+    return tr(vimrc, '\', '/') ==? tr(path, '\', '/')
 endfunction
 
 
