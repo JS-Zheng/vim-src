@@ -3,11 +3,13 @@
 This directory is the canonical home for `vim-src` test tooling, fixtures, and
 test suites.
 
-The Unix runner and its contract scripts support the macOS system Bash baseline:
-Bash 3.2 or newer. Do not introduce associative arrays, `mapfile`, case-changing
-parameter expansion, or other Bash 4+ syntax.
+The test runner is implemented once, in `tests/run.py`, and supports Python 3.8
+or newer. `tests/run` is a thin wrapper around it (set `PYTHON` to choose the
+interpreter).
 
-The cross-platform Python runner supports Python 3.8 or newer.
+`tests/runner_contract.bash` supports the macOS system Bash baseline: Bash 3.2
+or newer. Do not introduce associative arrays, `mapfile`, case-changing
+parameter expansion, or other Bash 4+ syntax there.
 
 If you want to understand how to run or extend the test suite, start here.
 
@@ -17,13 +19,13 @@ root `Makefile` exposes common shortcuts.
 ## Entry Points
 
 - `tests/run`
-  - canonical test runner
+  - canonical test runner entry point (wraps `tests/run.py`)
 - `tests/run.py`
-  - cross-platform runner with the same options, used on Windows
+  - the runner itself; call it directly on Windows
 - `tests/setup`
   - canonical local bootstrap for `vader.vim`
 - `tests/runner_contract.bash`
-  - runner selection/filtering contracts, run by `make test-runner`
+  - black-box runner selection/filtering contracts, run by `make test-runner`
 
 Convenience commands:
 
@@ -54,15 +56,16 @@ make test-all
 tests/run
 ```
 
-On Windows, check out `vader.vim` into `.deps/vader.vim` and use the Python
-runner:
+On Windows, check out `vader.vim` into `.deps/vader.vim` and call the runner
+directly:
 
 ```sh
 python tests/run.py
 python tests/run.py --suite src_command --case "modified named buffer"
 ```
 
-`VIM_BIN` selects the editor for either runner, for example `VIM_BIN=nvim`.
+`VIM_BIN` selects the editor, for example `VIM_BIN=nvim`. `SUITE` and `CASE`
+environment variables add one suite or case pattern, as `make test` passes them.
 
 Inspect generated runner state and retain temporary artifacts:
 
@@ -154,7 +157,6 @@ tests/
   setup
   lib/
     fake_vim_runner.bash
-    filter_vader_case.awk
     test_helper.vim
   fixtures/
   suites/

@@ -14,7 +14,7 @@ from typing import List, Optional, Tuple
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(add_help=True)
-    parser.add_argument("suite_positional", nargs="?", help="Suite name")
+    parser.add_argument("suite_positionals", nargs="*", metavar="SUITE", help="Suite name or path")
     parser.add_argument("--suite", dest="suites", action="append", default=[])
     parser.add_argument("--case", dest="cases", action="append", default=[])
     parser.add_argument("--list-suites", action="store_true")
@@ -23,10 +23,15 @@ def parse_args() -> argparse.Namespace:
 
 
 def normalize_suites(args: argparse.Namespace) -> List[str]:
-    suites = list(args.suites)
-    if args.suite_positional:
-        suites.append(args.suite_positional)
-    return suites
+    """Return selected suites: $SUITE first, then --suite and positionals."""
+    env_suite = os.environ.get("SUITE", "")
+    return ([env_suite] if env_suite else []) + args.suites + args.suite_positionals
+
+
+def normalize_cases(args: argparse.Namespace) -> List[str]:
+    """Return case patterns: $CASE first, then --case."""
+    env_case = os.environ.get("CASE", "")
+    return ([env_case] if env_case else []) + args.cases
 
 
 def is_windows_platform() -> bool:
@@ -206,6 +211,7 @@ endif
 def main() -> int:
     args = parse_args()
     suites = normalize_suites(args)
+    cases = normalize_cases(args)
 
     root_dir = Path(__file__).resolve().parent.parent
     vader_dir = Path(os.environ.get("VADER_DIR", root_dir / ".deps" / "vader.vim"))
@@ -218,12 +224,12 @@ def main() -> int:
     if duplicate_suite is not None:
         print(f"duplicate suite name: {duplicate_suite}", file=sys.stderr)
         return 1
-    if any(case == "" for case in args.cases):
+    if any(case == "" for case in cases):
         print("case pattern must not be empty", file=sys.stderr)
         return 2
 
     if args.list_suites:
-        if suites or args.cases or args.list_cases:
+        if suites or cases or args.list_cases:
             print("--list-suites cannot be combined with suite/case selection", file=sys.stderr)
             return 2
         for suite in available_suites:
@@ -231,7 +237,7 @@ def main() -> int:
         return 0
 
     if args.list_cases:
-        if suites or args.cases:
+        if suites or cases:
             print("--list-cases cannot be combined with suite/case selection", file=sys.stderr)
             return 2
         suite_file = resolve_suite_file(root_dir, args.list_cases)
@@ -261,61 +267,40 @@ def main() -> int:
     tmpdir = Path(tempfile.mkdtemp(prefix="vim-src-tests-"))
 
     try:
-        mode = "glob"
-        target = "tests/suites/shared/*.vader " + (
-            "tests/suites/windows/*.vader" if is_windows_platform() else "tests/suites/unix/*.vader"
-        )
-        selected_targets = list(available_suites)
-        list_path = tmpdir / "suites.txt"
-
-        if suites:
-            if len(suites) == 1 and not args.cases:
-                mode = "file"
-                target = resolve_suite_file(root_dir, suites[0]).as_posix()  # type: ignore[union-attr]
-            else:
-                mode = "list"
-                target = list_path.as_posix()
-                target_suites: List[Path] = []
-                for index, suite in enumerate(suites):
-                    src = resolve_suite_file(root_dir, suite)
-                    assert src is not None
-                    if args.cases:
-                        prepared = tmpdir / f"{index:03d}-prepared-{src.name}"
-                        include_error = prepare_case_suite(src, prepared)
-                        if include_error is not None:
-                            print(include_error, file=sys.stderr)
-                            return 1
-                        filtered = tmpdir / f"{index:03d}-{src.name}"
-                        if filter_vader_case(prepared, filtered, args.cases):
-                            target_suites.append(filtered)
-                    else:
-                        target_suites.append(src)
-                selected_targets = target_suites
-        elif args.cases:
-            mode = "list"
-            target = list_path.as_posix()
+        if not suites and not cases:
+            mode = "glob"
+            target = "tests/suites/shared/*.vader " + (
+                "tests/suites/windows/*.vader" if is_windows_platform() else "tests/suites/unix/*.vader"
+            )
+        else:
+            sources = [resolve_suite_file(root_dir, suite) for suite in suites] or available_suites
             selected: List[Path] = []
-            for index, src in enumerate(available_suites):
+            for index, src in enumerate(sources):
+                assert src is not None
+                if not cases:
+                    selected.append(src)
+                    continue
                 prepared = tmpdir / f"{index:03d}-prepared-{src.name}"
                 include_error = prepare_case_suite(src, prepared)
                 if include_error is not None:
                     print(include_error, file=sys.stderr)
                     return 1
                 filtered = tmpdir / f"{index:03d}-{src.name}"
-                if filter_vader_case(prepared, filtered, args.cases):
+                if filter_vader_case(prepared, filtered, cases):
                     selected.append(filtered)
-            selected_targets = selected
 
-        if mode == "list" and not selected_targets:
-            print("no test case matched the requested pattern(s)", file=sys.stderr)
-            return 1
+            if not selected:
+                print("no test case matched the requested pattern(s)", file=sys.stderr)
+                return 1
 
-        if mode == "list":
-            list_path.write_text(
-                "\n".join(path.as_posix() for path in selected_targets)
-                + ("\n" if selected_targets else ""),
-                encoding="utf-8",
-            )
+            if len(selected) == 1:
+                mode = "file"
+                target = selected[0].as_posix()
+            else:
+                mode = "list"
+                list_path = tmpdir / "suites.txt"
+                list_path.write_text("".join(f"{path.as_posix()}\n" for path in selected), encoding="utf-8")
+                target = list_path.as_posix()
 
         runner_vim = tmpdir / "run.vim"
         build_runner_vim(runner_vim)
