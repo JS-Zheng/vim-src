@@ -24,7 +24,7 @@ vim-src is a minimalist config loader for Vim and Neovim.
 
 Supported editors:
 - Vim 8.2 and newer
-- Neovim
+- Neovim 0.4.4 and newer
 
 It loads configuration files relative to a base directory.
 

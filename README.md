@@ -12,7 +12,7 @@ composable files and load them in a predictable way.
 Supported editors:
 
 * Vim 8.2+
-* Neovim
+* Neovim 0.4.4+
 
 It is intentionally minimal.
 
@@ -58,7 +58,7 @@ Plug 'JS-Zheng/vim-src'
 
 Requirements:
 
-* Vim 8.2+ or Neovim
+* Vim 8.2+ or Neovim 0.4.4+
 
 ---
 

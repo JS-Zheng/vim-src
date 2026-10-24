@@ -91,11 +91,9 @@ function! src#init() abort
 
     if exists(':Src') == 2
         if s:commands_defined
-            let s:commands_defined = 1
             return
         endif
 
-        let s:commands_defined = 0
         if !s:command_collision_reported
             echohl WarningMsg
             echomsg '[vim-src] command collision: :Src already exists; '
@@ -564,7 +562,7 @@ endfunction
 "
 function! s:dir_vim_children(path) abort
     try
-        let names = readdir(a:path)
+        let names = s:read_dir_names(a:path)
     catch
         call s:throw(g:src#ERR_INVALID_TARGET, 'directory ' .. a:path .. ' is unreadable')
     endtry
@@ -585,6 +583,29 @@ function! s:dir_vim_children(path) abort
     endfor
 
     return sort(children, function('s:compare_target_basenames'))
+endfunction
+
+
+" List the non-hidden entry names of a directory.
+"
+" Notes:
+" - readdir() is unavailable before Neovim 0.5, so fall back to glob() with
+"   the directory path escaped as a literal pattern. Hidden entries are
+"   skipped by callers, so the '*' pattern not matching them is harmless.
+"
+function! s:read_dir_names(path) abort
+    if exists('*readdir')
+        return readdir(a:path)
+    endif
+
+    if s:IS_WINDOWS
+        let pattern = substitute(a:path, '[[*?{}$`'']', '[&]', 'g')
+    else
+        let pattern = escape(a:path, '\[]*?{}$`''')
+    endif
+    let pattern = substitute(pattern, '[/\\]\+$', '', '') .. '/*'
+
+    return map(glob(pattern, 1, 1, 1), 'fnamemodify(v:val, ":t")')
 endfunction
 
 
@@ -1029,11 +1050,9 @@ endfunction
 " ==============================================================================
 
 if s:IS_WINDOWS
-    " Check if a path is absolute on Windows.
+    " Check if a path is absolute on Windows (drive, UNC, or rooted path).
     function! s:is_abs_path(path) abort
-        return a:path =~# '^[A-Za-z]:[/\\]'
-            \ || a:path =~# '^[/\\][/\\]'
-            \ || a:path =~# '^[\/\\]'
+        return a:path =~# '^[A-Za-z]:[/\\]' || a:path =~# '^[/\\]'
     endfunction
 else
     " Check if a path is absolute on Unix-like systems.
