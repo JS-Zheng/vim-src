@@ -56,6 +56,10 @@ You can also install it with [vim-plug](https://github.com/junegunn/vim-plug):
 Plug 'JS-Zheng/vim-src'
 ```
 
+A plugin manager only puts `vim-src` on `runtimepath` once it finishes, so
+call `src#init()` and use `Src` after that point (for vim-plug, after
+`call plug#end()`).
+
 Requirements:
 
 * Vim 8.2+ or Neovim 0.4.4+

@@ -12,15 +12,18 @@ The cross-platform Python runner supports Python 3.8 or newer.
 If you want to understand how to run or extend the test suite, start here.
 
 The actual test scripts live in `tests/`. For day-to-day convenience, the repo
-root `Makefile` exposes common shortcuts. `scripts/` is not part of the
-maintained test interface.
+root `Makefile` exposes common shortcuts.
 
 ## Entry Points
 
 - `tests/run`
   - canonical test runner
+- `tests/run.py`
+  - cross-platform runner with the same options, used on Windows
 - `tests/setup`
   - canonical local bootstrap for `vader.vim`
+- `tests/runner_contract.bash`
+  - runner selection/filtering contracts, run by `make test-runner`
 
 Convenience commands:
 
@@ -50,6 +53,16 @@ make test-all
 
 tests/run
 ```
+
+On Windows, check out `vader.vim` into `.deps/vader.vim` and use the Python
+runner:
+
+```sh
+python tests/run.py
+python tests/run.py --suite src_command --case "modified named buffer"
+```
+
+`VIM_BIN` selects the editor for either runner, for example `VIM_BIN=nvim`.
 
 Inspect generated runner state and retain temporary artifacts:
 
@@ -136,8 +149,11 @@ substring matches its `Execute` / `Do` header.
 tests/
   README.md
   run
+  run.py
+  runner_contract.bash
   setup
   lib/
+    fake_vim_runner.bash
     filter_vader_case.awk
     test_helper.vim
   fixtures/
