@@ -99,20 +99,18 @@ Typical setup:
 ```vim
 call src#init()
 
-let g:src.base_name = 'vimrcs'
 Src 'general.vim'
+Src 'plugins'
 Src! '~/.local.vimrc'
-
-call src#begin('plugins')
-Src 'git.vim'
-Src 'fzf.vim'
-call src#end()
 
 call src#begin('theme')
 Src 'colorscheme.vim'
 Src 'statusline.vim'
 call src#end()
 ```
+
+`Src!` skips a missing file. `src#begin()` opens a scope, so the next targets
+resolve inside `theme/` until `src#end()`.
 
 ---
 
@@ -146,78 +144,31 @@ Rules:
 
 ## Common Usage
 
-Interactive command usage:
+While developing Vimscript, reload without restarting:
 
-```vim
-:Src
-:Src 'general.vim'
-:Src 'plugins'
-```
-
-This is especially handy while developing Vimscript:
-
-- `:Src` reloads the current buffer
+- `:Src` reloads the current buffer, including your vimrc
 - `:Src 'file.vim'` reloads one file
-- `:Src 'plugins'` reloads a small config directory
+- `:Src 'plugins'` reloads a config directory
 
-Optional local file:
-
-```vim
-Src! '~/.local.vimrc'
-```
-
-Temporary nested scope:
+Load a file only when a condition holds:
 
 ```vim
-call src#begin('plugins')
-Src 'git.vim'
-Src 'fzf.vim'
-call src#end()
-
-call src#begin('theme')
-Src 'colorscheme.vim'
-Src 'statusline.vim'
-call src#end()
+Src 'macos.vim', {'if': has('mac')}
 ```
 
-Directory loading from the command line:
+Inside a loaded file, relative targets resolve against that file's own
+directory, so `plugins.vim` can load `Src 'plugins/git.vim'` from next to
+itself.
+
+Choose where the base directory comes from with one of:
 
 ```vim
-:Src 'plugins'
+let g:src = {'base_name': 'vimrcs'}
+let g:src = {'base_dir': '~/dotfiles/vim'}
 ```
 
-This loads direct child `*.vim` files from that directory in lexical order.
-
-Example:
-
-```text
-plugins/
-  10-core.vim
-  20-git.vim
-  30-fzf.vim
-```
-
-Running:
-
-```vim
-:Src 'plugins'
-```
-
-loads:
-
-1. `10-core.vim`
-2. `20-git.vim`
-3. `30-fzf.vim`
-
-Common options:
-
-```vim
-let g:src.base_dir = '~/.vim/vimrcs'
-let g:src.base_name = 'vimrcs'
-```
-
-Symlinks are always followed. The former `follow_links` option is no longer
-supported.
+`base_name` (default `vimrcs`) names a directory searched for under your config
+roots. `base_dir` names one directory explicitly and takes precedence.
 
 ---
 
