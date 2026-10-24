@@ -216,10 +216,7 @@ endfunction
 "   call src#begin('~/cfg-link')
 "
 function! src#begin(...) abort
-    call s:init_cfg()
-    if s:get_def_commands_cfg() && !s:owns_src_command()
-        call src#init()
-    endif
+    call src#init()
 
     if a:0 > 1
         call s:throw(g:src#ERR_INVALID_ARG, 'unexpected argument count')
@@ -264,26 +261,42 @@ endfunction
 "  Sourcing & Scope {{{
 " ==============================================================================
 
-" Source the contents of the current buffer.
+" Source the current buffer: from disk when it is a clean file buffer,
+" otherwise from its current contents through a temporary file.
+"
+" Notes:
+" - Relative targets resolve against the buffer's directory, except in
+"   $MYVIMRC: the editor rather than vim-src loads it, so a reload keeps the
+"   startup resolution context.
+" - Neovim picks the :source interpreter by extension, so Lua buffers keep a
+"   .lua temp file.
 "
 " Throws:
-" - src: source failure: current buffer ...
+" - src: source failure: current buffer[: <PATH>]
 "
 function! s:source_buffer() abort
-    let context = s:current_buffer_failure_context()
+    let path = expand('%:p')
+    let context = empty(path) ? 'current buffer' : 'current buffer: ' .. path
+    let context_dir = (empty(path) || s:is_myvimrc(path))
+        \ ? '' : fnamemodify(path, ':p:h')
     try
-        let path = expand('%:p')
-        if &buftype ==# '' && bufname('%') !=# '' && filereadable(path) && !&modified
-            " Source from disk if buffer is unchanged;
-            call s:source_script(path, s:buffer_context_dir(), context)
-        else
-            " otherwise, source from memory via temp file.
-            call s:source_buffer_contents(s:buffer_context_dir(), context)
+        if &buftype ==# '' && !&modified && filereadable(path)
+            call s:source_script(path, context_dir, context)
+            return
         endif
+
+        let is_lua = expand('%:e') ==? 'lua' || &filetype ==# 'lua'
+        let tmp = tempname() .. (is_lua ? '.lua' : '.vim')
+        call writefile(getline(1, '$'), tmp)
+        try
+            call s:source_script(tmp, context_dir, context)
+        finally
+            call delete(tmp)
+        endtry
+    catch /^src:/
+        throw v:exception
     catch
-        if v:exception =~# '^src:'
-            throw v:exception
-        endif
+        " Failures outside the sourced script, e.g. writing the temp file.
         call s:error(context, v:exception, v:throwpoint)
         call s:throw(g:src#ERR_SOURCE, context)
     endtry
@@ -453,42 +466,10 @@ function! s:source_script(path, context_dir, failure_context) abort
         if len(s:ctx_floor_stack) > floor_index
             call remove(s:ctx_floor_stack, floor_index, -1)
         endif
-        call s:restore_stack_depth(stack_depth)
+        if len(s:ctx_stack) > stack_depth
+            call remove(s:ctx_stack, stack_depth, -1)
+        endif
     endtry
-endfunction
-
-
-" Write buffer contents to a temporary file and source it.
-"
-" Notes:
-" - Neovim picks the :source interpreter by extension, so Lua buffers keep a
-"   .lua temp file.
-"
-function! s:source_buffer_contents(context_dir, failure_context) abort
-    let is_lua = expand('%:e') ==? 'lua' || &filetype ==# 'lua'
-    let tmp = tempname() .. (is_lua ? '.lua' : '.vim')
-    call writefile(getline(1, '$'), tmp)
-    try
-        call s:source_script(tmp, a:context_dir, a:failure_context)
-    finally
-        call delete(tmp)
-    endtry
-endfunction
-
-
-" Determine the directory context for the current buffer.
-"
-" Notes:
-" - $MYVIMRC is loaded by the editor rather than by vim-src, so reloading it
-"   keeps the startup resolution context instead of pushing its directory.
-"
-function! s:buffer_context_dir() abort
-    let path = expand('%:p')
-    if empty(path) || s:is_myvimrc(path)
-        return ''
-    endif
-
-    return fnamemodify(path, ':p:h')
 endfunction
 
 
@@ -506,25 +487,6 @@ function! s:is_myvimrc(path) abort
 
     " Vim on MS-Windows keeps mixed separators, and file names ignore case.
     return tr(vimrc, '\', '/') ==? tr(path, '\', '/')
-endfunction
-
-
-" Generate a diagnostic string for buffer source failures.
-function! s:current_buffer_failure_context() abort
-    let path = expand('%:p')
-    if empty(path)
-        return 'current buffer'
-    endif
-
-    return 'current buffer: ' .. path
-endfunction
-
-
-" Restore the context stack to a specific depth.
-function! s:restore_stack_depth(depth) abort
-    if len(s:ctx_stack) > a:depth
-        call remove(s:ctx_stack, a:depth, -1)
-    endif
 endfunction
 
 
@@ -885,6 +847,15 @@ function! s:get_def_commands_cfg() abort
 endfunction
 
 
+" Check if debug logging is enabled.
+function! s:get_debug_cfg() abort
+    return s:normalize_bool(
+        \ s:get_cfg('debug', s:DEFAULT_DEBUG),
+        \ 'g:src.debug'
+        \ )
+endfunction
+
+
 " Check whether :Src is the command defined by src#def_cmds().
 "
 " Notes:
@@ -907,15 +878,6 @@ function! s:owns_src_command() abort
         endif
     endfor
     return 0
-endfunction
-
-
-" Check if debug logging is enabled.
-function! s:get_debug_cfg() abort
-    return s:normalize_bool(
-        \ s:get_cfg('debug', s:DEFAULT_DEBUG),
-        \ 'g:src.debug'
-        \ )
 endfunction
 
 
@@ -1011,6 +973,15 @@ function! s:expand_tilde(path) abort
     endif
 
     return a:path
+endfunction
+
+
+" Return the home directory as a literal path, preferring $HOME.
+function! s:home_dir() abort
+    if exists('$HOME') && !empty($HOME)
+        return $HOME
+    endif
+    return expand('~')
 endfunction
 
 
@@ -1154,20 +1125,6 @@ function! s:normalize_bool(value, label) abort
         return a:value != 0.0
     endif
     return a:value != 0
-endfunction
-
-
-" }}}
-" ==============================================================================
-"  Misc Helpers {{{
-" ==============================================================================
-
-" Return the home directory as a literal path, preferring $HOME.
-function! s:home_dir() abort
-    if exists('$HOME') && !empty($HOME)
-        return $HOME
-    endif
-    return expand('~')
 endfunction
 
 
