@@ -203,3 +203,15 @@ Execute (Src! skips an empty target such as an unset variable):
 Then:
   AssertEqual ['base-dir-override'], g:src_default_base_hits
   unlet! g:src_default_base_hits
+
+
+Execute (src#begin() rejects an empty path instead of reopening the current scope):
+  let error = ''
+  try
+    call src#begin('')
+  catch
+    let error = v:exception
+  endtry
+
+Then:
+  AssertEqual 'src: ' .. g:src#ERR_INVALID_ARG .. ': path must not be empty', error

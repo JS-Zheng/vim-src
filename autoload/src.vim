@@ -63,11 +63,6 @@ let s:ctx_stack = []
 " protected stack depths owned by active source operations
 let s:ctx_floor_stack = []
 
-" cache key for the last successful default base-directory resolution
-let s:default_dir_cache_key = ''
-
-" cached result for the last successful default base-directory resolution
-let s:default_dir_cache_value = ''
 
 
 " }}}
@@ -127,7 +122,8 @@ endfunction
 " - [opts] (dict): Optional evaluated Vim Dict for command-layer options.
 "
 " Throws:
-" - src: invalid argument: unexpected argument count
+" - src: invalid argument: ... (argument count, types, or options)
+" - errors from src#() for the target itself
 "
 function! src#cmd(optional, ...) abort
     call s:init_cfg()
@@ -148,7 +144,7 @@ function! src#cmd(optional, ...) abort
     call s:validate_target(target)
     let opts = {}
     if a:0 == 2
-        " Normalize CLI string arguments into a typed Dictionary.
+        " Validate options and normalize their values to 0/1.
         let opts = s:normalize_cmd_opts(a:2)
         let optional = get(opts, 'optional', 0) || optional
     endif
@@ -173,6 +169,12 @@ endfunction
 "   call src#('file.vim')        → source a file or expand a directory
 "   call src#(['a.vim', 'dir'])  → source each entry in order
 "   call src#('local', 1)        → skip if missing
+"
+" Throws:
+" - src: invalid argument: ... (argument count, target, or optional)
+" - src: invalid target: ... (missing or unreadable target, unless optional)
+" - src: resolution failure: ... (no base directory for a relative target)
+" - src: source failure: ... (an error inside a sourced file)
 "
 " Notes:
 " - Real filenames containing $ are not supported by :source.
@@ -203,7 +205,9 @@ endfunction
 "
 " Throws:
 " - src: invalid argument: unexpected argument count
-" - src: resolution failure: <PATH> not found
+" - src: invalid argument: path must be a String
+" - src: invalid argument: path must not be empty
+" - src: resolution failure: ... (see s:resolve_default_dir())
 "
 " Examples:
 "   call src#begin()
@@ -221,41 +225,37 @@ function! src#begin(...) abort
         call s:throw(g:src#ERR_INVALID_ARG, 'unexpected argument count')
     endif
 
-    let base = a:0 == 0
-        \ ? s:resolve_default_dir()
-        \ : s:resolve_explicit_base_dir(s:require_string(a:1, 'path'))
+    if a:0 == 0
+        let base = s:resolve_default_dir()
+    else
+        " Like an empty target, an empty path usually comes from an unset
+        " variable and would otherwise reopen the current scope silently.
+        if empty(s:require_string(a:1, 'path'))
+            call s:throw(g:src#ERR_INVALID_ARG, 'path must not be empty')
+        endif
+        let base = s:require_resolution_base(s:target_entry_path(a:1))
+    endif
     call s:debug('begin: ' .. base)
     call s:register_startup_cleanup()
     call s:push_ctx(base)
 endfunction
 
 
-" Pop one base-directory scope from the stack. No-op when already empty.
-function! src#end() abort
-    call s:init_cfg()
-    call s:end()
-endfunction
-
-
-" Check whether :Src is the command defined by src#def_cmds().
+" Pop one base-directory scope from the stack.
 "
 " Notes:
-" - Ownership is decided by the exact definition rather than script state,
-"   so re-sourcing this script does not mistake its own :Src for a foreign
-"   command, while foreign commands that merely mention src#cmd stay foreign.
+" - No-op when no scope is open, or when the innermost scope belongs to a
+"   caller of the file being sourced.
 "
-function! s:owns_src_command() abort
-    if exists(':Src') != 2
-        return 0
+function! src#end() abort
+    call s:init_cfg()
+    if empty(s:ctx_stack)
+        \ || !empty(s:ctx_floor_stack) && len(s:ctx_stack) <= s:ctx_floor_stack[-1]
+        return
     endif
 
-    let definition = s:SRC_CMD_DEFINITION
-    for line in split(execute('command Src'), "\n")
-        if line =~# '^\S*\s\+Src\s'
-            return strpart(line, len(line) - len(definition)) ==# definition
-        endif
-    endfor
-    return 0
+    call s:debug('end: ' .. s:ctx_stack[-1])
+    call remove(s:ctx_stack, -1)
 endfunction
 
 
@@ -300,21 +300,6 @@ function! s:source_targets(target, optional) abort
     for path in type(a:target) == v:t_list ? a:target : [a:target]
         call s:source(path, a:optional)
     endfor
-endfunction
-
-
-" Pop the top base directory from the stack.
-function! s:end() abort
-    if empty(s:ctx_stack)
-        return
-    endif
-
-    if !empty(s:ctx_floor_stack) && len(s:ctx_stack) <= s:ctx_floor_stack[-1]
-        return
-    endif
-
-    call s:debug('end: ' .. s:ctx_stack[-1])
-    call remove(s:ctx_stack, -1)
 endfunction
 
 
@@ -416,29 +401,26 @@ endfunction
 " Source all direct *.vim children of a directory.
 "
 " Args:
-" - path (str): Directory path.
+" - path (str): Resolved directory path.
 " - optional (int): Non-zero to skip unreadable child targets.
 "
+" Notes:
+" - Each child is sourced with its own directory as context, so the
+"   directory itself needs no scope.
+"
 function! s:source_dir(path, optional) abort
-    let stack_depth = len(s:ctx_stack)
-    let children = s:dir_vim_children(a:path)
-    call s:push_ctx(a:path)
-    try
-        for child in children
-            if !filereadable(child.path)
-                if a:optional
-                    continue
-                endif
-                call s:throw(
-                    \ g:src#ERR_INVALID_TARGET,
-                    \ 'file ' .. child.entry_path .. ' is unreadable'
-                    \ )
+    for child in s:dir_vim_children(a:path)
+        if !filereadable(child.path)
+            if a:optional
+                continue
             endif
-            call s:source_file(child.path)
-        endfor
-    finally
-        call s:restore_stack_depth(stack_depth)
-    endtry
+            call s:throw(
+                \ g:src#ERR_INVALID_TARGET,
+                \ 'file ' .. child.entry_path .. ' is unreadable'
+                \ )
+        endif
+        call s:source_file(child.path)
+    endfor
 endfunction
 
 
@@ -579,23 +561,10 @@ function! s:current_resolution_base() abort
 endfunction
 
 
-" Resolve and validate an explicit base directory.
-"
-" Args:
-" - path (str): Candidate path.
-"
-" Returns:
-"   str: Validated absolute path.
-"
-function! s:resolve_explicit_base_dir(path) abort
-    return s:require_resolution_base(s:target_entry_path(a:path))
-endfunction
-
-
 " Find all direct *.vim file targets in a directory.
 "
 " Args:
-" - path (str): Directory path.
+" - path (str): Resolved directory path.
 "
 " Returns:
 "   dict[]: Loadable child target info entries.
@@ -603,14 +572,19 @@ endfunction
 " Throws:
 " - src: invalid target: directory <PATH> is unreadable
 "
+" Notes:
+" - Errors name the resolved path on purpose, which shows where a symlinked
+"   target actually points.
+"
 function! s:dir_vim_children(path) abort
+    let unreadable = 'directory ' .. a:path .. ' is unreadable'
     try
         let names = s:read_dir_names(a:path)
     catch
-        call s:throw(g:src#ERR_INVALID_TARGET, 'directory ' .. a:path .. ' is unreadable')
+        call s:throw(g:src#ERR_INVALID_TARGET, unreadable)
     endtry
     if s:looks_unreadable_dir(a:path, names)
-        call s:throw(g:src#ERR_INVALID_TARGET, 'directory ' .. a:path .. ' is unreadable')
+        call s:throw(g:src#ERR_INVALID_TARGET, unreadable)
     endif
 
     " Visible *.vim names only; sorting the names gives the byte-wise lexical
@@ -700,12 +674,19 @@ endfunction
 
 
 " Check if a directory matches the current context.
+"
+" Notes:
+" - ':p' keeps a trailing separator on directories and ':p:h' drops it, so
+"   compare without trailing separators.
+"
 function! s:ctx_matches(dir) abort
     if empty(s:ctx_stack)
         return 0
     endif
 
-    return s:ctx_stack[-1] ==# a:dir
+    let pattern = '[/\\]\+$'
+    return substitute(s:ctx_stack[-1], pattern, '', '')
+        \ ==# substitute(a:dir, pattern, '', '')
 endfunction
 
 
@@ -732,18 +713,18 @@ endfunction
 " Returns:
 "   str: Absolute path to the resolved base directory.
 "
+" Notes:
+" - Not cached: the search is a few isdirectory() checks, and a cache would
+"   go stale when directories or environment variables change.
+"
 " Throws:
+" - src: invalid argument: g:src.base_dir/base_name must be a String
 " - src: resolution failure: path must be absolute: <PATH>
 " - src: resolution failure: base directory not found for canonical config root
 " - src: resolution failure: base directory not found for base_name: <NAME>
-" - src: resolution failure: base directory not found: <PATH>
+" - src: resolution failure: <PATH> not found
 "
 function! s:resolve_default_dir() abort
-    let cache_key = s:default_dir_cache_key()
-    if s:default_dir_cache_key ==# cache_key && !empty(s:default_dir_cache_value)
-        return s:default_dir_cache_value
-    endif
-
     let configured_base_dir = s:get_base_dir_cfg()
     if !empty(configured_base_dir)
         let base_dir = s:expand_tilde(configured_base_dir)
@@ -767,10 +748,7 @@ function! s:resolve_default_dir() abort
     endif
 
     let base_dir = s:require_resolution_base(base_dir)
-
     call s:debug('default_base_dir: ' .. base_dir)
-    let s:default_dir_cache_key = cache_key
-    let s:default_dir_cache_value = base_dir
     return base_dir
 endfunction
 
@@ -852,12 +830,6 @@ function! s:find_base_dir(base_name) abort
 endfunction
 
 
-" Build the cache key for default base-directory resolution.
-function! s:default_dir_cache_key() abort
-    return string([s:get_base_dir_cfg(), s:get_base_name_cfg()])
-endfunction
-
-
 " }}}
 " ==============================================================================
 "  Configuration {{{
@@ -910,6 +882,31 @@ function! s:get_def_commands_cfg() abort
         \ s:get_cfg('def_commands', s:DEFAULT_DEF_COMMANDS),
         \ 'g:src.def_commands'
         \ )
+endfunction
+
+
+" Check whether :Src is the command defined by src#def_cmds().
+"
+" Notes:
+" - Ownership is decided by the exact definition rather than script state,
+"   so re-sourcing this script does not mistake its own :Src for a foreign
+"   command, while foreign commands that merely mention src#cmd stay foreign.
+" - A buffer-local :Src may be listed alongside the global one, so any
+"   matching definition counts.
+"
+function! s:owns_src_command() abort
+    if exists(':Src') != 2
+        return 0
+    endif
+
+    let definition = s:SRC_CMD_DEFINITION
+    for line in split(execute('command Src'), "\n")
+        if line =~# '^\S*\s\+Src\s'
+            \ && strpart(line, len(line) - len(definition)) ==# definition
+            return 1
+        endif
+    endfor
+    return 0
 endfunction
 
 
@@ -984,7 +981,7 @@ else
 endif
 
 
-" Concatenate a base directory and child entry safely.
+" Join a base directory and a child entry with exactly one '/' between them.
 "
 " Args:
 " - base (str): Base directory path.
@@ -992,8 +989,6 @@ endif
 "
 " Returns:
 "   str: Joined path string.
-"
-" Standardize slashes to avoid double-slash or missing-slash issues.
 "
 function! s:join_path(base, child) abort
     return substitute(a:base, '[/\\]\+$', '', '') .. '/' .. a:child
@@ -1009,18 +1004,10 @@ endfunction
 "   str: Path with ~ expanded to home directory.
 "
 function! s:expand_tilde(path) abort
-    if a:path ==# '~'
-        return s:home_dir()
-    endif
-
-    " Manual ~ expansion to avoid unwanted environment variable interpolation
-    " that standard expand() might trigger.
-    if strlen(a:path) > 1
-        let first = strpart(a:path, 0, 1)
-        let second = strpart(a:path, 1, 1)
-        if first ==# '~' && (second ==# '/' || second ==# '\')
-            return s:home_dir() .. strpart(a:path, 1)
-        endif
+    " Expand only '~' and '~/' or '~\' by hand: expand() would also
+    " interpolate environment variables and wildcards in the rest of the path.
+    if a:path =~# '^\~\%([/\\]\|$\)'
+        return s:home_dir() .. strpart(a:path, 1)
     endif
 
     return a:path
@@ -1050,6 +1037,7 @@ endfunction
 "
 " Throws:
 " - src: resolution failure: path must be absolute: <PATH>
+" - src: resolution failure: <PATH> not found
 "
 function! s:require_resolution_base(path) abort
     let resolved = resolve(a:path)

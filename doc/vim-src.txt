@@ -75,7 +75,7 @@ Load files:
 
         An empty target is rejected, or skipped with [!], so an unset
         variable such as `Src! $LOCAL_VIMRC` does not load the whole base
-        directory.
+        directory. An empty List loads nothing.
 
         {opts} is an evaluated Dictionary with these optional keys:
 
@@ -125,7 +125,8 @@ src#([{path} [, {optional}]])
 
                                                 *src#begin()*
 src#begin([{path}])
-        Push a new base directory scope. {path} must be a String.
+        Push a new base directory scope. {path} must be a non-empty String;
+        a relative {path} resolves against the current scope.
 
                                                 *src#end()*
 src#end()
@@ -203,8 +204,8 @@ Resolution order:
 
    Search:
 
-        stdpath('config')
-        ~/vimfiles
+        stdpath('config')          (Neovim)
+        ~/vimfiles                 (Windows)
         ~/.vim
         $XDG_CONFIG_HOME/vim
         dirname($MYVIMRC)

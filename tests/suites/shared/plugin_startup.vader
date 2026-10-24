@@ -63,6 +63,21 @@ Then:
   Assert messages !~# 'command collision', messages
 
 
+Execute (A buffer-local Src command does not hide the global vim-src command):
+  call src#init()
+  enew
+  command! -buffer Src echo 'buffer-local'
+  let messages = ''
+  redir => messages
+  silent call src#begin(getcwd() . '/tests/fixtures/base-dir/existing')
+  redir END
+  call src#end()
+  bwipeout!
+
+Then:
+  Assert messages !~# 'command collision', messages
+
+
 Execute (src#init() preserves a foreign Src command and reports the collision):
   let g:src_foreign_command_hit = 0
   command! Src let g:src_foreign_command_hit = 1
